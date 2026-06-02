@@ -1,4 +1,4 @@
-import Foundation
+@preconcurrency import Foundation
 
 actor TMDBService {
     // Cache TMDB ID → IMDB ID so switching years doesn't re-fetch known IDs
