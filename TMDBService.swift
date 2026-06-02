@@ -63,17 +63,17 @@ actor TMDBService {
 
 // MARK: - Private Decodable types
 
-private struct MovieDiscoverResponse: Decodable {
+private struct MovieDiscoverResponse: Decodable, Sendable {
     let results: [MovieResult]
 }
 
-private struct MovieResult: Decodable {
+private struct MovieResult: Decodable, Sendable {
     let id: Int
     let title: String
     let revenue: Int?
     let vote_count: Int?
 }
 
-private struct ExternalIDsResponse: Decodable {
+private struct ExternalIDsResponse: Decodable, Sendable {
     let imdb_id: String?
 }
