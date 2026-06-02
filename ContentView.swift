@@ -4,6 +4,7 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
+    @State private var showingAbout = false
 
     var body: some View {
         NavigationStack {
@@ -56,6 +57,19 @@ struct ContentView: View {
             }
             .navigationTitle("ReelRankings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingAbout = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(gold)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAbout) {
+                AboutView()
+            }
             .overlay(alignment: .bottom) {
                 if let message = viewModel.errorMessage {
                     ErrorBannerView(message: message) {
@@ -75,6 +89,63 @@ struct ContentView: View {
         .onChange(of: viewModel.selectedYear) {
             Task { await viewModel.loadMovies() }
         }
+    }
+}
+
+// MARK: - About
+
+private struct AboutView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ZStack {
+            Color(white: 0.07).ignoresSafeArea()
+
+            VStack(spacing: 32) {
+                Spacer()
+
+                VStack(spacing: 8) {
+                    Text("ReelRankings")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.white)
+                    Text("Box office vs. audience favorites,\nyear by year.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                Divider()
+
+                VStack(spacing: 12) {
+                    Text("Data provided by")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        openURL(URL(string: "https://www.themoviedb.org")!)
+                    } label: {
+                        Text("The Movie Database (TMDB)")
+                            .font(.headline)
+                            .foregroundStyle(gold)
+                    }
+
+                    Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                Spacer()
+
+                Button("Done") { dismiss() }
+                    .font(.headline)
+                    .foregroundStyle(gold)
+                    .padding(.bottom, 24)
+            }
+            .padding(.horizontal, 32)
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
