@@ -1,6 +1,7 @@
-@preconcurrency import Foundation
+import Foundation
 
-actor TMDBService {
+@MainActor
+final class TMDBService {
     // Cache TMDB ID → IMDB ID so switching years doesn't re-fetch known IDs
     private var imdbIDCache: [Int: String] = [:]
 
