@@ -5,6 +5,7 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
     @State private var showingAbout = false
+    @State private var showingMyFilms = false
 
     var body: some View {
         NavigationStack {
@@ -58,6 +59,14 @@ struct ContentView: View {
             .navigationTitle("ReelRankings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingMyFilms = true
+                    } label: {
+                        Image(systemName: "film.stack")
+                            .foregroundStyle(gold)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingAbout = true
@@ -66,6 +75,9 @@ struct ContentView: View {
                             .foregroundStyle(gold)
                     }
                 }
+            }
+            .sheet(isPresented: $showingMyFilms) {
+                MyFilmsView()
             }
             .sheet(isPresented: $showingAbout) {
                 AboutView()

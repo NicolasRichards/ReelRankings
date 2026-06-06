@@ -5,6 +5,7 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 struct MovieRowView: View {
     let rank: Int
     let movie: Movie
+    var userMovie: UserMovie?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -34,6 +35,21 @@ struct MovieRowView: View {
                     .foregroundStyle(Color.white.opacity(0.75))
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Personal status indicator
+            if let record = userMovie {
+                if record.isOnWatchlist {
+                    Image(systemName: "bookmark.fill")
+                        .font(.caption2)
+                        .foregroundStyle(gold)
+                        .padding(.top, 3)
+                } else if record.isSeen {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                        .padding(.top, 3)
+                }
             }
         }
         .padding(.horizontal, 8)

@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct ReelRankingsApp: App {
@@ -6,5 +7,6 @@ struct ReelRankingsApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: UserMovie.self)
     }
 }
