@@ -14,8 +14,9 @@ struct MovieListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(movies.enumerated()), id: \.element.id) { index, movie in
-                MovieRowView(rank: index + 1, movie: movie, userMovie: userMovieByID[movie.id])
-                    .onLongPressGesture { selectedMovie = movie }
+                MovieRowView(rank: index + 1, movie: movie, userMovie: userMovieByID[movie.id]) {
+                    selectedMovie = movie
+                }
                 if index < movies.count - 1 {
                     Divider().opacity(0.25)
                 }

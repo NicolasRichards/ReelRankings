@@ -6,6 +6,7 @@ struct MovieRowView: View {
     let rank: Int
     let movie: Movie
     var userMovie: UserMovie?
+    var onOptions: (() -> Void)?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -37,20 +38,24 @@ struct MovieRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Personal status indicator
-            if let record = userMovie {
-                if record.isOnWatchlist {
+            // Status icon / options button
+            Button {
+                onOptions?()
+            } label: {
+                if let record = userMovie, record.isOnWatchlist {
                     Image(systemName: "bookmark.fill")
-                        .font(.caption2)
                         .foregroundStyle(gold)
-                        .padding(.top, 3)
-                } else if record.isSeen {
+                } else if let record = userMovie, record.isSeen {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.caption2)
                         .foregroundStyle(.green)
-                        .padding(.top, 3)
+                } else {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(Color.white.opacity(0.25))
                 }
             }
+            .font(.caption)
+            .buttonStyle(.plain)
+            .padding(.top, 3)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
