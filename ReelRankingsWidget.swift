@@ -96,10 +96,13 @@ struct ReelRankingsWidget: Widget {
 }
 
 // MARK: - Widget Bundle
+// NOTE: Move this file to the Widget Extension target when you create it in Xcode.
+// The @main WidgetBundle below is commented out to avoid conflicting with ReelRankingsApp's @main.
+// Uncomment it once this file is in its own widget target.
 
-@main
-struct ReelRankingsWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        ReelRankingsWidget()
-    }
-}
+// @main
+// struct ReelRankingsWidgetBundle: WidgetBundle {
+//     var body: some Widget {
+//         ReelRankingsWidget()
+//     }
+// }
