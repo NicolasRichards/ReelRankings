@@ -9,15 +9,35 @@ struct MyFilmsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var editingMovie: UserMovie?
+    @State private var seenSort: SeenSort = .year
+
+    enum SeenSort { case year, rating }
 
     private var watchlist: [UserMovie] { userMovies.filter { $0.isOnWatchlist } }
 
-    // Seen movies grouped by year, most recent year first
-    private var seenByYear: [(year: Int, movies: [UserMovie])] {
+    // Groups for the Seen section, label + sorted movies
+    private var seenGroups: [(label: String, movies: [UserMovie])] {
         let seen = userMovies.filter { $0.isSeen }
-        let grouped = Dictionary(grouping: seen, by: { $0.year })
-        return grouped.keys.sorted(by: >).map { year in
-            (year: year, movies: grouped[year]!)
+        switch seenSort {
+        case .year:
+            let grouped = Dictionary(grouping: seen, by: { $0.year })
+            return grouped.keys.sorted(by: >).map { year in
+                let sorted = grouped[year]!.sorted { a, b in
+                    // rated above unrated, then higher rating first
+                    if a.userRating == b.userRating { return false }
+                    if a.userRating == 0 { return false }
+                    if b.userRating == 0 { return true }
+                    return a.userRating > b.userRating
+                }
+                return (label: String(year), movies: sorted)
+            }
+        case .rating:
+            let grouped = Dictionary(grouping: seen, by: { $0.userRating })
+            return grouped.keys.sorted(by: >).map { rating in
+                let sorted = grouped[rating]!.sorted { $0.year > $1.year }
+                let label = rating == 0 ? "Unrated" : String(repeating: "★", count: rating)
+                return (label: label, movies: sorted)
+            }
         }
     }
 
@@ -61,8 +81,18 @@ struct MyFilmsView: View {
                             if !watchlist.isEmpty {
                                 filmSection(title: "Watchlist", icon: "bookmark.fill", movies: watchlist)
                             }
-                            ForEach(seenByYear, id: \.year) { group in
-                                filmSection(title: "Seen It — \(group.year)", icon: "checkmark.circle.fill", movies: group.movies)
+                            if !seenGroups.isEmpty {
+                                // Sort picker
+                                Picker("Sort seen by", selection: $seenSort) {
+                                    Text("By Year").tag(SeenSort.year)
+                                    Text("By Rating").tag(SeenSort.rating)
+                                }
+                                .pickerStyle(.segmented)
+                                .padding(.horizontal, 20)
+
+                                ForEach(seenGroups, id: \.label) { group in
+                                    filmSection(title: group.label, icon: "checkmark.circle.fill", movies: group.movies)
+                                }
                             }
                         }
                         .padding(.horizontal, 20)
