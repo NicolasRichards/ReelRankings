@@ -5,6 +5,7 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 
 struct MovieOptionsSheet: View {
     let movie: Movie
+    let year: Int
     let existingRecord: UserMovie?
 
     @Environment(\.modelContext) private var modelContext
@@ -135,7 +136,7 @@ struct MovieOptionsSheet: View {
         if let existing = existingRecord {
             record = existing
         } else {
-            record = UserMovie(tmdbID: movie.id, title: movie.title)
+            record = UserMovie(tmdbID: movie.id, title: movie.title, year: year)
             modelContext.insert(record)
         }
         record.isOnWatchlist = isOnWatchlist

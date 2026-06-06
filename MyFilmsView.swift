@@ -11,7 +11,15 @@ struct MyFilmsView: View {
     @State private var editingMovie: UserMovie?
 
     private var watchlist: [UserMovie] { userMovies.filter { $0.isOnWatchlist } }
-    private var seen: [UserMovie] { userMovies.filter { $0.isSeen } }
+
+    // Seen movies grouped by year, most recent year first
+    private var seenByYear: [(year: Int, movies: [UserMovie])] {
+        let seen = userMovies.filter { $0.isSeen }
+        let grouped = Dictionary(grouping: seen, by: { $0.year })
+        return grouped.keys.sorted(by: >).map { year in
+            (year: year, movies: grouped[year]!)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -41,7 +49,7 @@ struct MyFilmsView: View {
                         Text("No films yet")
                             .font(.headline)
                             .foregroundStyle(.secondary)
-                        Text("Long-press any movie to add it\nto your watchlist or mark it seen.")
+                        Text("Tap ⊙ on any movie to add it\nto your watchlist or mark it seen.")
                             .font(.subheadline)
                             .foregroundStyle(Color.white.opacity(0.4))
                             .multilineTextAlignment(.center)
@@ -53,8 +61,8 @@ struct MyFilmsView: View {
                             if !watchlist.isEmpty {
                                 filmSection(title: "Watchlist", icon: "bookmark.fill", movies: watchlist)
                             }
-                            if !seen.isEmpty {
-                                filmSection(title: "Seen It", icon: "checkmark.circle.fill", movies: seen)
+                            ForEach(seenByYear, id: \.year) { group in
+                                filmSection(title: "Seen It — \(group.year)", icon: "checkmark.circle.fill", movies: group.movies)
                             }
                         }
                         .padding(.horizontal, 20)

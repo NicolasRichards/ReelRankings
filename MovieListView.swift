@@ -3,6 +3,7 @@ import SwiftData
 
 struct MovieListView: View {
     let movies: [Movie]
+    let year: Int
 
     @Query private var userMovies: [UserMovie]
     @State private var selectedMovie: Movie?
@@ -25,7 +26,7 @@ struct MovieListView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(item: $selectedMovie) { movie in
-            MovieOptionsSheet(movie: movie, existingRecord: userMovieByID[movie.id])
+            MovieOptionsSheet(movie: movie, year: year, existingRecord: userMovieByID[movie.id])
         }
     }
 }
