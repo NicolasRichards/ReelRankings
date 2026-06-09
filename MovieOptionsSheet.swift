@@ -132,8 +132,11 @@ struct MovieOptionsSheet: View {
     }
 
     private func save() {
+        // Re-fetch by tmdbID instead of trusting existingRecord: that value is
+        // captured at presentation time, so after the first save here it can
+        // still be nil and a second toggle would insert a duplicate record.
         let record: UserMovie
-        if let existing = existingRecord {
+        if let existing = existingRecord ?? fetchRecord() {
             record = existing
         } else {
             record = UserMovie(tmdbID: movie.id, title: movie.title, year: year)
@@ -143,5 +146,12 @@ struct MovieOptionsSheet: View {
         record.isSeen = isSeen
         record.userRating = userRating
         try? modelContext.save()
+    }
+
+    private func fetchRecord() -> UserMovie? {
+        let id = movie.id
+        var descriptor = FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == id })
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
     }
 }

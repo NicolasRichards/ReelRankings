@@ -9,7 +9,8 @@ struct MovieListView: View {
     @State private var selectedMovie: Movie?
 
     private var userMovieByID: [Int: UserMovie] {
-        Dictionary(uniqueKeysWithValues: userMovies.map { ($0.tmdbID, $0) })
+        // uniquingKeysWith: a duplicate tmdbID must never crash the list
+        Dictionary(userMovies.map { ($0.tmdbID, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     var body: some View {
