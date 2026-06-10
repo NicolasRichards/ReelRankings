@@ -9,3 +9,6 @@ DerivedData/
 
 # macOS
 .DS_Store
+
+# Local planning doc — not for the public repo
+ReelRankings ClaudeCode Spec.pdf
