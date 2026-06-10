@@ -1,0 +1,11 @@
+# Real API key — never commit. Copy Secrets.swift.example to
+# ReelRankings/Secrets.swift and add your own key.
+ReelRankings/Secrets.swift
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# macOS
+.DS_Store
