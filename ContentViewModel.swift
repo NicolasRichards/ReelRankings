@@ -38,7 +38,6 @@ class ContentViewModel: ObservableObject {
             boxOfficeMovies = bo
             audienceMovies = aud
             isLoading = false
-            saveTopMovieForWidget(title: bo.first?.title, year: year)
 
             // Fetch IMDB IDs in parallel, updating lists progressively as each resolves
             let allIDs = Array(Set(bo.map(\.id) + aud.map(\.id)))
@@ -76,13 +75,6 @@ class ContentViewModel: ObservableObject {
             guard movie.id == id else { return movie }
             return Movie(id: movie.id, title: movie.title, revenue: movie.revenue, voteCount: movie.voteCount, imdbID: imdbID)
         }
-    }
-
-    private func saveTopMovieForWidget(title: String?, year: Int) {
-        guard let title,
-              let defaults = UserDefaults(suiteName: Config.appGroupID) else { return }
-        defaults.set(title, forKey: "widgetTopMovieTitle")
-        defaults.set(year, forKey: "widgetTopMovieYear")
     }
 
     private func showError(_ message: String) {
