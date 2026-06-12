@@ -13,6 +13,8 @@ struct MovieRowView: View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(rank).")
                 .font(.caption.monospaced())
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(gold)
                 .frame(width: 24, alignment: .trailing)
                 .padding(.top, 1)
