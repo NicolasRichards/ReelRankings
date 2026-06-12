@@ -3,13 +3,14 @@ import Foundation
 
 @Model
 final class UserMovie {
-    var tmdbID: Int
-    var title: String
-    var year: Int
-    var isOnWatchlist: Bool
-    var isSeen: Bool
-    var userRating: Int  // 0 = unrated, 1–5
-    var dateAdded: Date
+    // CloudKit-backed SwiftData requires a default value on every property
+    var tmdbID: Int = 0
+    var title: String = ""
+    var year: Int = 0
+    var isOnWatchlist: Bool = false
+    var isSeen: Bool = false
+    var userRating: Int = 0  // 0 = unrated, 1–5
+    var dateAdded: Date = Date()
 
     init(tmdbID: Int, title: String, year: Int) {
         self.tmdbID = tmdbID
