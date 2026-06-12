@@ -4,6 +4,7 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
+    @AppStorage("listDepth") private var listDepth = 10
     @State private var showingAbout = false
     @State private var showingMyFilms = false
 
@@ -42,10 +43,12 @@ struct ContentView: View {
                     Divider()
 
                     // Two-column movie lists
-                    HStack(alignment: .top, spacing: 0) {
-                        MovieListView(movies: viewModel.boxOfficeMovies, year: viewModel.selectedYear)
-                        Divider()
-                        MovieListView(movies: viewModel.audienceMovies, year: viewModel.selectedYear)
+                    ScrollView {
+                        HStack(alignment: .top, spacing: 0) {
+                            MovieListView(movies: viewModel.boxOfficeMovies, year: viewModel.selectedYear)
+                            Divider()
+                            MovieListView(movies: viewModel.audienceMovies, year: viewModel.selectedYear)
+                        }
                     }
                 }
 
@@ -64,6 +67,18 @@ struct ContentView: View {
                         showingMyFilms = true
                     } label: {
                         Image(systemName: "film.stack")
+                            .foregroundStyle(gold)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("List Depth", selection: $listDepth) {
+                            ForEach([5, 10, 15, 20], id: \.self) { depth in
+                                Text("Top \(depth)").tag(depth)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "list.number")
                             .foregroundStyle(gold)
                     }
                 }
@@ -96,10 +111,13 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
         .task {
-            await viewModel.loadMovies()
+            await viewModel.loadMovies(depth: listDepth)
         }
         .onChange(of: viewModel.selectedYear) {
-            Task { await viewModel.loadMovies() }
+            Task { await viewModel.loadMovies(depth: listDepth) }
+        }
+        .onChange(of: listDepth) {
+            Task { await viewModel.loadMovies(depth: listDepth) }
         }
     }
 }

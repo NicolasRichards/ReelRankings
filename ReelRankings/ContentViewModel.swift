@@ -13,6 +13,8 @@ class ContentViewModel: ObservableObject {
 
     private let service = TMDBService()
     private var dismissTask: Task<Void, Never>?
+    // Incremented on every load so stale responses (older year OR older depth) are discarded
+    private var loadGeneration = 0
 
     init() {
         let currentYear = Calendar.current.component(.year, from: Date())
@@ -21,7 +23,9 @@ class ContentViewModel: ObservableObject {
         self.availableYears = Array(stride(from: defaultYear, through: 1939, by: -1))
     }
 
-    func loadMovies() async {
+    func loadMovies(depth: Int) async {
+        loadGeneration += 1
+        let generation = loadGeneration
         let year = selectedYear
         isLoading = true
         errorMessage = nil
@@ -30,11 +34,11 @@ class ContentViewModel: ObservableObject {
 
         do {
             // Fetch both lists concurrently
-            async let boxOffice = service.fetchBoxOfficeTop10(year: year)
-            async let audience = service.fetchAudienceTop10(year: year)
+            async let boxOffice = service.fetchBoxOfficeTop(year: year, count: depth)
+            async let audience = service.fetchAudienceTop(year: year, count: depth)
             let (bo, aud) = try await (boxOffice, audience)
 
-            guard year == selectedYear else { return }
+            guard generation == loadGeneration else { return }
             boxOfficeMovies = bo
             audienceMovies = aud
             isLoading = false
@@ -48,12 +52,12 @@ class ContentViewModel: ObservableObject {
                     }
                 }
                 for await (id, imdbID) in group {
-                    guard let imdbID, year == self.selectedYear else { continue }
+                    guard let imdbID, generation == self.loadGeneration else { continue }
                     self.applyIMDBID(id: id, imdbID: imdbID)
                 }
             }
         } catch {
-            guard year == selectedYear else { return }
+            guard generation == loadGeneration else { return }
             isLoading = false
             showError("Couldn't load \(year) — check your connection.")
         }

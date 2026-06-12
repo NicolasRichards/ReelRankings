@@ -5,9 +5,9 @@ final class TMDBService {
     // Cache TMDB ID → IMDB ID so switching years doesn't re-fetch known IDs
     private var imdbIDCache: [Int: String] = [:]
 
-    // MARK: - Box Office Top 10
+    // MARK: - Box Office
 
-    func fetchBoxOfficeTop10(year: Int) async throws -> [Movie] {
+    func fetchBoxOfficeTop(year: Int, count: Int) async throws -> [Movie] {
         var components = URLComponents(string: "\(Config.tmdbBaseURL)/discover/movie")!
         components.queryItems = [
             URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
@@ -18,14 +18,14 @@ final class TMDBService {
         ]
         let (data, _) = try await URLSession.shared.data(from: components.url!)
         let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
-        return Array(response.results.prefix(10)).map {
+        return Array(response.results.prefix(count)).map {
             Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0, imdbID: nil)
         }
     }
 
-    // MARK: - Audience Favorites Top 10
+    // MARK: - Audience Favorites
 
-    func fetchAudienceTop10(year: Int) async throws -> [Movie] {
+    func fetchAudienceTop(year: Int, count: Int) async throws -> [Movie] {
         var components = URLComponents(string: "\(Config.tmdbBaseURL)/discover/movie")!
         components.queryItems = [
             URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
@@ -36,7 +36,7 @@ final class TMDBService {
         ]
         let (data, _) = try await URLSession.shared.data(from: components.url!)
         let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
-        return Array(response.results.prefix(10)).map {
+        return Array(response.results.prefix(count)).map {
             Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0, imdbID: nil)
         }
     }
