@@ -162,6 +162,11 @@ private struct AboutView: View {
                         .multilineTextAlignment(.center)
                 }
 
+                Text("For years before 1939, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
                 Divider()
 
                 VStack(spacing: 12) {
