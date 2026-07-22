@@ -7,6 +7,7 @@ struct ContentView: View {
     @AppStorage("listDepth") private var listDepth = 10
     @State private var showingAbout = false
     @State private var showingMyFilms = false
+    @State private var showingSearch = false
 
     var body: some View {
         NavigationStack {
@@ -70,6 +71,14 @@ struct ContentView: View {
                             .foregroundStyle(gold)
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(gold)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("List Depth", selection: $listDepth) {
@@ -93,6 +102,14 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showingMyFilms) {
                 MyFilmsView()
+            }
+            .sheet(isPresented: $showingSearch) {
+                MovieSearchView { year in
+                    let bounds = viewModel.availableYears
+                    let minYear = bounds.last ?? year
+                    let maxYear = bounds.first ?? year
+                    viewModel.selectedYear = min(max(year, minYear), maxYear)
+                }
             }
             .sheet(isPresented: $showingAbout) {
                 AboutView()

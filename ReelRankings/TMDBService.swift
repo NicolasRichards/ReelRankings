@@ -41,6 +41,20 @@ final class TMDBService {
         }
     }
 
+    // MARK: - Search
+
+    func searchMovies(query: String) async throws -> [MovieSearchResult] {
+        var components = URLComponents(string: "\(Config.tmdbBaseURL)/search/movie")!
+        components.queryItems = [
+            URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "include_adult", value: "false")
+        ]
+        let (data, _) = try await URLSession.shared.data(from: components.url!)
+        let response = try JSONDecoder().decode(MovieSearchResponse.self, from: data)
+        return response.results
+    }
+
     // MARK: - IMDB ID Lookup (single, with cache)
 
     func fetchIMDBID(for movieID: Int) async -> (Int, String?) {
@@ -77,4 +91,20 @@ struct MovieResult: Decodable, Sendable {
 
 struct ExternalIDsResponse: Decodable, Sendable {
     let imdb_id: String?
+}
+
+struct MovieSearchResponse: Decodable, Sendable {
+    let results: [MovieSearchResult]
+}
+
+struct MovieSearchResult: Decodable, Sendable, Identifiable {
+    let id: Int
+    let title: String
+    let release_date: String?
+
+    // TMDB dates are "YYYY-MM-DD"; nil when a release date isn't known yet.
+    var year: Int? {
+        guard let release_date, release_date.count >= 4 else { return nil }
+        return Int(release_date.prefix(4))
+    }
 }
