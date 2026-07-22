@@ -20,7 +20,7 @@ class ContentViewModel: ObservableObject {
         let currentYear = Calendar.current.component(.year, from: Date())
         let defaultYear = currentYear - 1
         self.selectedYear = defaultYear
-        self.availableYears = Array(stride(from: defaultYear, through: 1939, by: -1))
+        self.availableYears = Array(stride(from: defaultYear, through: 1929, by: -1))
     }
 
     func loadMovies(depth: Int) async {

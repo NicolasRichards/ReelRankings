@@ -46,9 +46,9 @@ struct ContentView: View {
                     // Two-column movie lists
                     ScrollView {
                         HStack(alignment: .top, spacing: 0) {
-                            MovieListView(movies: viewModel.boxOfficeMovies, year: viewModel.selectedYear)
+                            MovieListView(movies: viewModel.boxOfficeMovies, year: viewModel.selectedYear, targetCount: listDepth)
                             Divider()
-                            MovieListView(movies: viewModel.audienceMovies, year: viewModel.selectedYear)
+                            MovieListView(movies: viewModel.audienceMovies, year: viewModel.selectedYear, targetCount: listDepth)
                         }
                     }
                 }
