@@ -2,14 +2,7 @@ import Foundation
 
 @MainActor
 final class TMDBService {
-    // iOS's default URLSession caps concurrent connections per host low enough that
-    // the verified-revenue lookups (up to ~20 in parallel) end up queuing in small
-    // batches on a real network. Raise the cap so they actually run concurrently.
-    private let session: URLSession = {
-        let config = URLSessionConfiguration.default
-        config.httpMaximumConnectionsPerHost = 16
-        return URLSession(configuration: config)
-    }()
+    private let session = URLSession.shared
 
     // Cache TMDB ID → IMDB ID so switching years doesn't re-fetch known IDs
     private var imdbIDCache: [Int: String] = [:]
