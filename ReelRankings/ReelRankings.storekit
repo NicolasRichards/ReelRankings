@@ -1,0 +1,68 @@
+{
+  "identifier" : "E47DC28D-6FCE-4FCA-A5DC-B8742F9D3A03",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "F5809208-09C8-4861-8552-17E80FD7AC7D",
+      "localizations" : [
+        {
+          "description" : "A small thank-you for a free app.",
+          "displayName" : "Small Tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "NickRichards.ReelRankings.tip.small",
+      "referenceName" : "Small Tip",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "3.99",
+      "familyShareable" : false,
+      "internalID" : "3DFBB6C3-F123-4D4D-A090-05148C41D8FE",
+      "localizations" : [
+        {
+          "description" : "A generous thank-you for a free app.",
+          "displayName" : "Medium Tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "NickRichards.ReelRankings.tip.medium",
+      "referenceName" : "Medium Tip",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "B017ECA8-380A-4684-AC91-A930DD6960BD",
+      "localizations" : [
+        {
+          "description" : "A very generous thank-you for a free app.",
+          "displayName" : "Large Tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "NickRichards.ReelRankings.tip.large",
+      "referenceName" : "Large Tip",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 
@@ -144,60 +145,182 @@ struct ContentView: View {
 private struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.requestReview) private var requestReview
+    @State private var tipJar = TipJar()
+
+    private let appStoreURL = URL(string: "https://apps.apple.com/app/id6776025432")!
 
     var body: some View {
         ZStack {
             Color(white: 0.07).ignoresSafeArea()
 
-            VStack(spacing: 32) {
-                Spacer()
-
-                VStack(spacing: 8) {
-                    Text("ReelRankings")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
-                    Text("Box office vs. audience favorites,\nyear by year.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                Text("For years before 1939, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Divider()
-
-                VStack(spacing: 12) {
-                    Text("Data provided by")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        openURL(URL(string: "https://www.themoviedb.org")!)
-                    } label: {
-                        Text("The Movie Database (TMDB)")
-                            .font(.headline)
-                            .foregroundStyle(gold)
+            ScrollView {
+                VStack(spacing: 28) {
+                    VStack(spacing: 8) {
+                        Text("ReelRankings")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.white)
+                        Text("Box office vs. audience favorites,\nyear by year.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
+                    .padding(.top, 24)
 
-                    Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
+                    Text("For years before 1939, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+
+                    supportSection
+
+                    Divider()
+
+                    VStack(spacing: 12) {
+                        Text("Data provided by")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        Button {
+                            openURL(URL(string: "https://www.themoviedb.org")!)
+                        } label: {
+                            Text("The Movie Database (TMDB)")
+                                .font(.headline)
+                                .foregroundStyle(gold)
+                        }
+
+                        Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Text("Made with love by Nicolas Richards")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button("Done") { dismiss() }
+                        .font(.headline)
+                        .foregroundStyle(gold)
+                        .padding(.top, 4)
+                        .padding(.bottom, 24)
                 }
+                .padding(.horizontal, 28)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task { await tipJar.load() }
+        .task { await tipJar.listenForTransactions() }
+    }
+
+    // MARK: Support
+
+    private var supportSection: some View {
+        VStack(spacing: 16) {
+            Text("Enjoying the app? 🎬")
+                .font(.title3.bold())
+                .foregroundStyle(.white)
+
+            Text("This app is 100% free, ad-free and tracking free, a gift meant for every movie lover. Have a little extra and want to say thanks? Only do this if you really can afford to!")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                Text("☕ Buy us a coffee?")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                if tipJar.didTip {
+                    Text("Thank you so much. 💛")
+                        .font(.subheadline)
+                        .foregroundStyle(gold)
+                        .padding(.vertical, 8)
+                } else if tipJar.loadFailed {
+                    Text("Tip options couldn't load right now.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                } else if tipJar.products.isEmpty {
+                    ProgressView()
+                        .tint(gold)
+                        .padding(.vertical, 12)
+                } else {
+                    ForEach(Array(tipJar.products.enumerated()), id: \.element.id) { index, product in
+                        tipRow(reels: index + 1, product: product)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 16))
+
+            HStack(spacing: 12) {
+                Button {
+                    requestReview()
+                } label: {
+                    Label("Rate us", systemImage: "star.fill")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(gold.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+                }
+                .foregroundStyle(gold)
+
+                Button {
+                    openURL(appStoreURL)
+                } label: {
+                    Label("App Store", systemImage: "arrow.up.forward")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(gold.opacity(0.5)))
+                }
+                .foregroundStyle(gold)
+            }
+        }
+    }
+
+    private func tipRow(reels: Int, product: Product) -> some View {
+        Button {
+            Task { await tipJar.purchase(product) }
+        } label: {
+            HStack(spacing: 12) {
+                HStack(spacing: 3) {
+                    ForEach(0..<reels, id: \.self) { _ in
+                        Image(systemName: "movieclapper")
+                    }
+                }
+                .foregroundStyle(gold)
+
+                Text(tierName(for: reels))
+                    .foregroundStyle(.white)
 
                 Spacer()
 
-                Button("Done") { dismiss() }
-                    .font(.headline)
-                    .foregroundStyle(gold)
-                    .padding(.bottom, 24)
+                if tipJar.purchasing == product.id {
+                    ProgressView().tint(gold)
+                } else {
+                    Text(product.displayPrice)
+                        .font(.headline)
+                        .foregroundStyle(gold)
+                }
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(gold.opacity(0.35)))
         }
-        .preferredColorScheme(.dark)
+        .buttonStyle(.plain)
+        .disabled(tipJar.purchasing != nil)
+    }
+
+    private func tierName(for reels: Int) -> String {
+        switch reels {
+        case 1: "Small tip"
+        case 2: "Medium tip"
+        default: "Large tip"
+        }
     }
 }
 
