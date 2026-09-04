@@ -13,11 +13,22 @@ struct MyFilmsView: View {
 
     enum SeenSort { case year, rating }
 
-    private var watchlist: [UserMovie] { userMovies.filter { $0.isOnWatchlist } }
+    // uniquingKeysWith: a duplicate tmdbID must never render twice, even before
+    // the activation-time merge pass has healed it — keep the oldest record,
+    // matching what UserMovie.deduplicate keeps
+    private var uniqueMovies: [UserMovie] {
+        Dictionary(grouping: userMovies, by: \.tmdbID).values.compactMap { records in
+            records.min { $0.dateAdded < $1.dateAdded }
+        }
+    }
+
+    private var watchlist: [UserMovie] {
+        uniqueMovies.filter { $0.isOnWatchlist }.sorted { $0.dateAdded > $1.dateAdded }
+    }
 
     // Groups for the Seen section, label + sorted movies
     private var seenGroups: [(label: String, movies: [UserMovie])] {
-        let seen = userMovies.filter { $0.isSeen }
+        let seen = uniqueMovies.filter { $0.isSeen }
         switch seenSort {
         case .year:
             let grouped = Dictionary(grouping: seen, by: { $0.year })
