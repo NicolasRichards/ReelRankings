@@ -18,6 +18,7 @@ struct ReelRankingsApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .task { await TipJar.shared.listenForTransactions() }
         }
         .modelContainer(sharedModelContainer)
         .onChange(of: scenePhase) { _, phase in

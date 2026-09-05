@@ -5,6 +5,7 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("listDepth") private var listDepth = 10
     @State private var showingAbout = false
     @State private var showingMyFilms = false
@@ -53,6 +54,9 @@ struct ContentView: View {
                         }
                     }
                 }
+                // Two columns of short titles read as lost in space at iPad
+                // width, so cap the layout and let the ZStack centre it.
+                .frame(maxWidth: horizontalSizeClass == .regular ? 700 : .infinity)
 
                 // Loading overlay
                 if viewModel.isLoading {
@@ -146,7 +150,7 @@ private struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
-    @State private var tipJar = TipJar()
+    private let tipJar = TipJar.shared
 
     private let appStoreURL = URL(string: "https://apps.apple.com/app/id6776025432")!
 
@@ -210,7 +214,6 @@ private struct AboutView: View {
         }
         .preferredColorScheme(.dark)
         .task { await tipJar.load() }
-        .task { await tipJar.listenForTransactions() }
     }
 
     // MARK: Support
