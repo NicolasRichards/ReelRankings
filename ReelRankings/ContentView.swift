@@ -220,56 +220,62 @@ private struct AboutView: View {
         ZStack {
             Color(white: 0.07).ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 28) {
-                    VStack(spacing: 8) {
-                        Text("ReelRankings")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.white)
-                        Text("Box office vs. audience favorites,\nyear by year.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.top, 24)
-
-                    Text("For years before 1939, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-
-                    supportSection
-
-                    Divider()
-
-                    VStack(spacing: 12) {
-                        Text("Data provided by")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-
-                        Image("TMDBLogo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 150)
-                            .accessibilityLabel("The Movie Database (TMDB)")
-
-                        Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    Text("Made with love by Nicolas Richards")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
                     Button("Done") { dismiss() }
                         .font(.headline)
                         .foregroundStyle(gold)
-                        .padding(.top, 4)
-                        .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+
+                ScrollView {
+                    VStack(spacing: 28) {
+                        VStack(spacing: 8) {
+                            Text("ReelRankings")
+                                .font(.largeTitle.bold())
+                                .foregroundStyle(.white)
+                            Text("Box office vs. audience favorites,\nyear by year.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.top, 8)
+
+                        Text("For years before 1939, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        supportSection
+
+                        Divider()
+
+                        VStack(spacing: 12) {
+                            Text("Data provided by")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            Image("TMDBLogo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 150)
+                                .accessibilityLabel("The Movie Database (TMDB)")
+
+                            Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        Text("Made with love by Nicolas Richards")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 24)
+                    }
+                    .padding(.horizontal, 28)
+                }
             }
         }
         .preferredColorScheme(.dark)
