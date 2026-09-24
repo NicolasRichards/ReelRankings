@@ -42,25 +42,28 @@ class ContentViewModel: ObservableObject {
             boxOfficeMovies = bo
             audienceMovies = aud
             isLoading = false
-
-            // Fetch IMDB IDs in parallel, updating lists progressively as each resolves
-            let allIDs = Array(Set(bo.map(\.id) + aud.map(\.id)))
-            await withTaskGroup(of: (Int, String?).self) { group in
-                for id in allIDs {
-                    group.addTask { [service] in
-                        await service.fetchIMDBID(for: id)
-                    }
-                }
-                for await (id, imdbID) in group {
-                    guard let imdbID, generation == self.loadGeneration else { continue }
-                    self.applyIMDBID(id: id, imdbID: imdbID)
-                }
-            }
         } catch {
             guard generation == loadGeneration else { return }
             isLoading = false
             showError("Couldn't load \(year) — check your connection.")
         }
+    }
+
+    /// A film's places in the currently displayed lists, e.g. #3 Box Office.
+    func rankings(for movie: Movie) -> [FilmRanking] {
+        var result: [FilmRanking] = []
+        if let index = boxOfficeMovies.firstIndex(where: { $0.id == movie.id }) {
+            result.append(FilmRanking(list: "Box Office", rank: index + 1, year: selectedYear))
+        }
+        if let index = audienceMovies.firstIndex(where: { $0.id == movie.id }) {
+            result.append(FilmRanking(list: "Audience Favorite", rank: index + 1, year: selectedYear))
+        }
+        return result
+    }
+
+    /// Films shown for the year across both columns, counting a film in both once.
+    var displayedFilmIDs: Set<Int> {
+        Set(boxOfficeMovies.map(\.id) + audienceMovies.map(\.id))
     }
 
     func dismissError() {
@@ -69,17 +72,6 @@ class ContentViewModel: ObservableObject {
     }
 
     // MARK: - Private
-
-    private func applyIMDBID(id: Int, imdbID: String) {
-        boxOfficeMovies = boxOfficeMovies.map { movie in
-            guard movie.id == id else { return movie }
-            return Movie(id: movie.id, title: movie.title, revenue: movie.revenue, voteCount: movie.voteCount, imdbID: imdbID)
-        }
-        audienceMovies = audienceMovies.map { movie in
-            guard movie.id == id else { return movie }
-            return Movie(id: movie.id, title: movie.title, revenue: movie.revenue, voteCount: movie.voteCount, imdbID: imdbID)
-        }
-    }
 
     private func showError(_ message: String) {
         errorMessage = message

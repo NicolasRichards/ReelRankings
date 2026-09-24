@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import StoreKit
 
 private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
@@ -6,10 +7,15 @@ private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.modelContext) private var modelContext
+    @Query private var userMovies: [UserMovie]
     @AppStorage("listDepth") private var listDepth = 10
     @State private var showingAbout = false
     @State private var showingMyFilms = false
     @State private var showingSearch = false
+    @State private var detailMovie: Movie?
+
+    private var userMovieByID: [Int: UserMovie] { userMovies.canonicalByTMDBID }
 
     var body: some View {
         NavigationStack {
@@ -25,6 +31,11 @@ struct ContentView: View {
                     }
                     .pickerStyle(.wheel)
                     .frame(height: 120)
+
+                    SeenProgressView(
+                        seen: viewModel.displayedFilmIDs.filter { userMovieByID[$0]?.isSeen == true }.count,
+                        total: viewModel.displayedFilmIDs.count
+                    )
 
                     // Column headers
                     HStack(spacing: 0) {
@@ -48,9 +59,21 @@ struct ContentView: View {
                     // Two-column movie lists
                     ScrollView {
                         HStack(alignment: .top, spacing: 0) {
-                            MovieListView(movies: viewModel.boxOfficeMovies, year: viewModel.selectedYear, targetCount: listDepth)
+                            MovieListView(
+                                movies: viewModel.boxOfficeMovies,
+                                targetCount: listDepth,
+                                userMovieByID: userMovieByID,
+                                onToggleSeen: toggleSeen,
+                                onSelect: { detailMovie = $0 }
+                            )
                             Divider()
-                            MovieListView(movies: viewModel.audienceMovies, year: viewModel.selectedYear, targetCount: listDepth)
+                            MovieListView(
+                                movies: viewModel.audienceMovies,
+                                targetCount: listDepth,
+                                userMovieByID: userMovieByID,
+                                onToggleSeen: toggleSeen,
+                                onSelect: { detailMovie = $0 }
+                            )
                         }
                     }
                 }
@@ -72,17 +95,22 @@ struct ContentView: View {
                     Button {
                         showingMyFilms = true
                     } label: {
-                        Image(systemName: "film.stack")
-                            .foregroundStyle(gold)
+                        HStack(spacing: 6) {
+                            Image(systemName: "film.stack")
+                            Text("My Films")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .foregroundStyle(gold)
                     }
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingSearch = true
                     } label: {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(gold)
                     }
+                    .accessibilityLabel("Search")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -104,6 +132,9 @@ struct ContentView: View {
                             .foregroundStyle(gold)
                     }
                 }
+            }
+            .sheet(item: $detailMovie) { movie in
+                FilmDetailView(movie: movie, year: viewModel.selectedYear, rankings: viewModel.rankings(for: movie))
             }
             .sheet(isPresented: $showingMyFilms) {
                 MyFilmsView()
@@ -141,6 +172,37 @@ struct ContentView: View {
         .onChange(of: listDepth) {
             Task { await viewModel.loadMovies(depth: listDepth) }
         }
+    }
+
+    private func toggleSeen(_ movie: Movie) {
+        let isSeen = userMovieByID[movie.id]?.isSeen == true
+        UserMovie.update(movie, year: viewModel.selectedYear, in: modelContext) { $0.setSeen(!isSeen) }
+    }
+}
+
+// MARK: - Seen progress
+
+private struct SeenProgressView: View {
+    let seen: Int
+    let total: Int
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(gold)
+            Text("You've seen \(seen) of \(total)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .contentTransition(.numericText())
+            ProgressView(value: Double(seen), total: Double(max(total, 1)))
+                .tint(gold)
+                .frame(width: 70)
+        }
+        .padding(.vertical, 6)
+        // Hidden rather than removed while a year loads, so the lists don't jump
+        .opacity(total > 0 ? 1 : 0)
+        .animation(.default, value: seen)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -185,13 +247,9 @@ private struct AboutView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
-                        Button {
-                            openURL(URL(string: "https://www.themoviedb.org")!)
-                        } label: {
-                            Text("The Movie Database (TMDB)")
-                                .font(.headline)
-                                .foregroundStyle(gold)
-                        }
+                        Text("The Movie Database (TMDB)")
+                            .font(.headline)
+                            .foregroundStyle(gold)
 
                         Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
                             .font(.caption)

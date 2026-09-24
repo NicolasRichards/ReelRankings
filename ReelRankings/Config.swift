@@ -6,4 +6,5 @@
 enum Config {
     static let tmdbAPIKey = Secrets.tmdbAPIKey
     static let tmdbBaseURL = "https://api.themoviedb.org/3"
+    static let tmdbImageBaseURL = "https://image.tmdb.org/t/p"
 }

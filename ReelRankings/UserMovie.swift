@@ -24,6 +24,46 @@ final class UserMovie {
 }
 
 extension UserMovie {
+    // Unmarking Seen keeps the rating stored (every view hides it unless the
+    // film is seen), so an accidental tap on a list checkmark is undone by
+    // tapping again rather than silently losing the rating.
+    func setSeen(_ seen: Bool) {
+        isSeen = seen
+        if seen { isOnWatchlist = false }
+    }
+
+    func setRating(_ rating: Int) {
+        userRating = rating
+        if rating > 0 { setSeen(true) }
+    }
+
+    func setOnWatchlist(_ onWatchlist: Bool) {
+        isOnWatchlist = onWatchlist
+        if onWatchlist { isSeen = false }
+    }
+
+    /// Applies `change` to the film's record, creating it first if needed, and
+    /// deletes the record instead if the change left nothing worth keeping.
+    /// Every synced duplicate gets the same change: editing only one would let
+    /// `deduplicate` merge a stale value (say, Seen) back in on next launch.
+    @MainActor
+    static func update(_ movie: Movie, year: Int, in context: ModelContext, _ change: (UserMovie) -> Void) {
+        let id = movie.id
+        var records = (try? context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == id }))) ?? []
+        if records.isEmpty {
+            let record = UserMovie(tmdbID: movie.id, title: movie.title, year: year)
+            context.insert(record)
+            records = [record]
+        }
+        for record in records {
+            change(record)
+            if !record.isSeen && !record.isOnWatchlist && record.userRating == 0 {
+                context.delete(record)
+            }
+        }
+        try? context.save()
+    }
+
     /// CloudKit-backed SwiftData can't enforce a unique constraint on tmdbID,
     /// so independent edits on two devices can sync into duplicate records.
     /// Merges each duplicate group into its oldest record and deletes the rest.
@@ -44,5 +84,15 @@ extension UserMovie {
             didMerge = true
         }
         if didMerge { try? context.save() }
+    }
+}
+
+extension Sequence where Element == UserMovie {
+    /// One record per film even before `deduplicate` has healed a synced
+    /// duplicate — the oldest, the same one `deduplicate` keeps.
+    var canonicalByTMDBID: [Int: UserMovie] {
+        Dictionary(grouping: self, by: \.tmdbID).compactMapValues { records in
+            records.min { $0.dateAdded < $1.dateAdded }
+        }
     }
 }

@@ -4,8 +4,6 @@ import Foundation
 final class TMDBService {
     private let session = URLSession.shared
 
-    // Cache TMDB ID → IMDB ID so switching years doesn't re-fetch known IDs
-    private var imdbIDCache: [Int: String] = [:]
     // Cache TMDB ID → verified revenue (pre-1939 years only)
     private var revenueCache: [Int: Int] = [:]
 
@@ -32,7 +30,7 @@ final class TMDBService {
         let (data, _) = try await session.data(from: components.url!)
         let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
         return Array(response.results.prefix(count)).map {
-            Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0, imdbID: nil)
+            Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0)
         }
     }
 
@@ -73,7 +71,7 @@ final class TMDBService {
         return verifiedByID.values
             .sorted { $0.1 > $1.1 }
             .prefix(count)
-            .map { Movie(id: $0.0.id, title: $0.0.title, revenue: $0.1, voteCount: $0.0.vote_count ?? 0, imdbID: nil) }
+            .map { Movie(id: $0.0.id, title: $0.0.title, revenue: $0.1, voteCount: $0.0.vote_count ?? 0) }
     }
 
     private func fetchRevenueDiscoverPage(year: Int, page: Int) async throws -> [MovieResult] {
@@ -121,7 +119,7 @@ final class TMDBService {
         let (data, _) = try await session.data(from: components.url!)
         let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
         return Array(response.results.prefix(count)).map {
-            Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0, imdbID: nil)
+            Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0)
         }
     }
 
@@ -139,24 +137,18 @@ final class TMDBService {
         return response.results
     }
 
-    // MARK: - IMDB ID Lookup (single, with cache)
+    // MARK: - Film Detail
 
-    func fetchIMDBID(for movieID: Int) async -> (Int, String?) {
-        if let cached = imdbIDCache[movieID] {
-            return (movieID, cached)
-        }
-        let urlString = "\(Config.tmdbBaseURL)/movie/\(movieID)/external_ids?api_key=\(Config.tmdbAPIKey)"
-        guard let url = URL(string: urlString) else { return (movieID, nil) }
-        do {
-            let (data, _) = try await session.data(from: url)
-            let ext = try JSONDecoder().decode(ExternalIDsResponse.self, from: data)
-            if let imdbID = ext.imdb_id {
-                imdbIDCache[movieID] = imdbID
-            }
-            return (movieID, ext.imdb_id)
-        } catch {
-            return (movieID, nil)
-        }
+    /// One request per tapped film; `credits` rides along via append_to_response.
+    func fetchFilmDetail(id: Int) async throws -> FilmDetail {
+        var components = URLComponents(string: "\(Config.tmdbBaseURL)/movie/\(id)")!
+        components.queryItems = [
+            URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
+            URLQueryItem(name: "append_to_response", value: "credits")
+        ]
+        let (data, _) = try await session.data(from: components.url!)
+        let response = try JSONDecoder().decode(FilmDetailResponse.self, from: data)
+        return FilmDetail(response: response)
     }
 }
 
@@ -171,10 +163,6 @@ struct MovieResult: Decodable, Sendable {
     let title: String
     let revenue: Int?
     let vote_count: Int?
-}
-
-struct ExternalIDsResponse: Decodable, Sendable {
-    let imdb_id: String?
 }
 
 struct MovieDetailResponse: Decodable, Sendable {
@@ -195,4 +183,29 @@ struct MovieSearchResult: Decodable, Sendable, Identifiable {
         guard let release_date, release_date.count >= 4 else { return nil }
         return Int(release_date.prefix(4))
     }
+}
+
+struct FilmDetailResponse: Decodable, Sendable {
+    struct Genre: Decodable, Sendable { let name: String }
+    struct CastMember: Decodable, Sendable { let name: String; let character: String? }
+    struct CrewMember: Decodable, Sendable { let name: String; let job: String? }
+    struct Credits: Decodable, Sendable {
+        let cast: [CastMember]?
+        let crew: [CrewMember]?
+    }
+
+    let id: Int
+    let title: String
+    let release_date: String?
+    let tagline: String?
+    let poster_path: String?
+    let backdrop_path: String?
+    let runtime: Int?
+    let genres: [Genre]?
+    let overview: String?
+    let budget: Int?
+    let revenue: Int?
+    let vote_average: Double?
+    let vote_count: Int?
+    let credits: Credits?
 }

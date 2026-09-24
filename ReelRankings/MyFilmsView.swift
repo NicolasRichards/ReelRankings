@@ -13,13 +13,11 @@ struct MyFilmsView: View {
 
     enum SeenSort { case year, rating }
 
-    // uniquingKeysWith: a duplicate tmdbID must never render twice, even before
-    // the activation-time merge pass has healed it — keep the oldest record,
-    // matching what UserMovie.deduplicate keeps
+    // A duplicate tmdbID must never render twice, even before the
+    // activation-time merge pass has healed it
     private var uniqueMovies: [UserMovie] {
-        Dictionary(grouping: userMovies, by: \.tmdbID).values.compactMap { records in
-            records.min { $0.dateAdded < $1.dateAdded }
-        }
+        let canonical = userMovies.canonicalByTMDBID
+        return userMovies.filter { canonical[$0.tmdbID] === $0 }
     }
 
     private var watchlist: [UserMovie] {
@@ -71,7 +69,7 @@ struct MyFilmsView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 16)
 
-                if userMovies.isEmpty {
+                if watchlist.isEmpty && seenGroups.isEmpty {
                     Spacer()
                     VStack(spacing: 12) {
                         Image(systemName: "film.stack")
@@ -80,7 +78,7 @@ struct MyFilmsView: View {
                         Text("No films yet")
                             .font(.headline)
                             .foregroundStyle(.secondary)
-                        Text("Tap ⊙ on any movie to add it\nto your watchlist or mark it seen.")
+                        Text("Tap the circle beside any film to mark it seen,\nor tap the film to rate it or add it to your watchlist.")
                             .font(.subheadline)
                             .foregroundStyle(Color.white.opacity(0.4))
                             .multilineTextAlignment(.center)
