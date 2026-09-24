@@ -247,9 +247,11 @@ private struct AboutView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
-                        Text("The Movie Database (TMDB)")
-                            .font(.headline)
-                            .foregroundStyle(gold)
+                        Image("TMDBLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 150)
+                            .accessibilityLabel("The Movie Database (TMDB)")
 
                         Text("This product uses the TMDB API but is not\nendorsed or certified by TMDB.")
                             .font(.caption)
