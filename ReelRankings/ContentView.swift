@@ -56,24 +56,30 @@ struct ContentView: View {
 
                     Divider()
 
-                    // Two-column movie lists
-                    ScrollView {
-                        HStack(alignment: .top, spacing: 0) {
-                            MovieListView(
-                                movies: viewModel.boxOfficeMovies,
-                                targetCount: listDepth,
-                                userMovieByID: userMovieByID,
-                                onToggleSeen: toggleSeen,
-                                onSelect: { detailMovie = $0 }
-                            )
-                            Divider()
-                            MovieListView(
-                                movies: viewModel.audienceMovies,
-                                targetCount: listDepth,
-                                userMovieByID: userMovieByID,
-                                onToggleSeen: toggleSeen,
-                                onSelect: { detailMovie = $0 }
-                            )
+                    if let message = viewModel.errorMessage {
+                        LoadErrorView(message: message) {
+                            viewModel.reload(depth: listDepth)
+                        }
+                    } else {
+                        // Two-column movie lists
+                        ScrollView {
+                            HStack(alignment: .top, spacing: 0) {
+                                MovieListView(
+                                    movies: viewModel.boxOfficeMovies,
+                                    targetCount: listDepth,
+                                    userMovieByID: userMovieByID,
+                                    onToggleSeen: toggleSeen,
+                                    onSelect: { detailMovie = $0 }
+                                )
+                                Divider()
+                                MovieListView(
+                                    movies: viewModel.audienceMovies,
+                                    targetCount: listDepth,
+                                    userMovieByID: userMovieByID,
+                                    onToggleSeen: toggleSeen,
+                                    onSelect: { detailMovie = $0 }
+                                )
+                            }
                         }
                     }
                 }
@@ -150,27 +156,16 @@ struct ContentView: View {
             .sheet(isPresented: $showingAbout) {
                 AboutView()
             }
-            .overlay(alignment: .bottom) {
-                if let message = viewModel.errorMessage {
-                    ErrorBannerView(message: message) {
-                        viewModel.dismissError()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
         }
         .preferredColorScheme(.dark)
         .task {
-            await viewModel.loadMovies(depth: listDepth)
+            viewModel.reload(depth: listDepth)
         }
         .onChange(of: viewModel.selectedYear) {
-            Task { await viewModel.loadMovies(depth: listDepth) }
+            viewModel.reload(depth: listDepth)
         }
         .onChange(of: listDepth) {
-            Task { await viewModel.loadMovies(depth: listDepth) }
+            viewModel.reload(depth: listDepth)
         }
     }
 
@@ -407,25 +402,33 @@ private struct AboutView: View {
     }
 }
 
-// MARK: - Error Banner
+// MARK: - Load error
 
-private struct ErrorBannerView: View {
+/// Shown in place of the lists when a year fails to load. Placeholder dashes
+/// would look like a year with no data, so the failure stays visible here.
+private struct LoadErrorView: View {
     let message: String
-    let onDismiss: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
-        HStack {
+        VStack(spacing: 14) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.largeTitle)
+                .foregroundStyle(Color.white.opacity(0.35))
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.leading)
-            Spacer()
-            Button("Dismiss", action: onDismiss)
-                .font(.subheadline.bold())
-                .foregroundStyle(gold)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button(action: onRetry) {
+                Label("Retry", systemImage: "arrow.clockwise")
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(gold.opacity(0.18), in: Capsule())
+            }
+            .foregroundStyle(gold)
         }
-        .padding()
-        .background(Color(white: 0.18), in: RoundedRectangle(cornerRadius: 12))
-        .onTapGesture { onDismiss() }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

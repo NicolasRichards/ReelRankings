@@ -7,12 +7,13 @@ class ContentViewModel: ObservableObject {
     @Published var boxOfficeMovies: [Movie] = []
     @Published var audienceMovies: [Movie] = []
     @Published var isLoading = false
+    /// Set when the latest load failed; stays up until a retry or a new year.
     @Published var errorMessage: String? = nil
 
     let availableYears: [Int]
 
     private let service = TMDBService()
-    private var dismissTask: Task<Void, Never>?
+    private var loadTask: Task<Void, Never>?
     // Incremented on every load so stale responses (older year OR older depth) are discarded
     private var loadGeneration = 0
 
@@ -25,9 +26,16 @@ class ContentViewModel: ObservableObject {
         self.availableYears = Array(stride(from: defaultYear, through: 1929, by: -1))
     }
 
-    func loadMovies(depth: Int) async {
+    /// Starts loading the selected year, cancelling any load still in flight
+    /// so a fast scroll through the years doesn't leave requests piling up.
+    func reload(depth: Int) {
+        loadTask?.cancel()
         loadGeneration += 1
         let generation = loadGeneration
+        loadTask = Task { await loadMovies(depth: depth, generation: generation) }
+    }
+
+    private func loadMovies(depth: Int, generation: Int) async {
         let year = selectedYear
         isLoading = true
         errorMessage = nil
@@ -47,7 +55,7 @@ class ContentViewModel: ObservableObject {
         } catch {
             guard generation == loadGeneration else { return }
             isLoading = false
-            showError("Couldn't load \(year) — check your connection.")
+            errorMessage = "Couldn't load \(year). Check your connection and try again."
         }
     }
 
@@ -66,23 +74,5 @@ class ContentViewModel: ObservableObject {
     /// Films shown for the year across both columns, counting a film in both once.
     var displayedFilmIDs: Set<Int> {
         Set(boxOfficeMovies.map(\.id) + audienceMovies.map(\.id))
-    }
-
-    func dismissError() {
-        dismissTask?.cancel()
-        errorMessage = nil
-    }
-
-    // MARK: - Private
-
-    private func showError(_ message: String) {
-        errorMessage = message
-        dismissTask?.cancel()
-        dismissTask = Task {
-            try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled {
-                errorMessage = nil
-            }
-        }
     }
 }

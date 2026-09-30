@@ -229,8 +229,12 @@ private struct MyFilmsEditSheet: View {
                             Text("My Rating")
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            StarRatingView(rating: $userRating)
-                                .onChange(of: userRating) { save() }
+                            // Saves on a tap only: .onChange would also fire when
+                            // onAppear loads the rating, overwriting duplicates
+                            StarRatingView(rating: Binding(
+                                get: { userRating },
+                                set: { userRating = $0; save() }
+                            ))
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 14)
@@ -241,8 +245,7 @@ private struct MyFilmsEditSheet: View {
                 .padding(.horizontal, 20)
 
                 Button(role: .destructive) {
-                    modelContext.delete(record)
-                    try? modelContext.save()
+                    UserMovie.removeAll(tmdbID: record.tmdbID, in: modelContext)
                     dismiss()
                 } label: {
                     Label("Remove from My Films", systemImage: "trash")
@@ -286,9 +289,13 @@ private struct MyFilmsEditSheet: View {
     }
 
     private func save() {
-        record.isOnWatchlist = isOnWatchlist
-        record.isSeen = isSeen
-        record.userRating = userRating
-        try? modelContext.save()
+        // Every synced duplicate gets the change, or the launch-time merge
+        // would bring a stale value (say, Seen) back
+        UserMovie.update(tmdbID: record.tmdbID, title: record.title, year: record.year,
+                         in: modelContext, deletingIfEmpty: false) {
+            $0.isOnWatchlist = isOnWatchlist
+            $0.isSeen = isSeen
+            $0.userRating = userRating
+        }
     }
 }

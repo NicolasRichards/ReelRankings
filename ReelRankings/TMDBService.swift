@@ -13,6 +13,19 @@ final class TMDBService {
     // and only rank the ones we can confirm.
     private static let verifiedRevenueCutoffYear = 1939
 
+    // MARK: - Requests
+
+    /// Every request goes through here. TMDB's error replies (rate limit, bad
+    /// key, server error) are JSON bodies that can still decode into an
+    /// all-optional model, so a non-2xx status has to be turned into a throw.
+    private func fetchData(from url: URL) async throws -> Data {
+        let (data, response) = try await session.data(from: url)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw TMDBError.badStatus(http.statusCode)
+        }
+        return data
+    }
+
     // MARK: - Box Office
 
     func fetchBoxOfficeTop(year: Int, count: Int) async throws -> [Movie] {
@@ -27,7 +40,7 @@ final class TMDBService {
             URLQueryItem(name: "vote_count.gte", value: "50"),
             URLQueryItem(name: "page", value: "1")
         ]
-        let (data, _) = try await session.data(from: components.url!)
+        let data = try await fetchData(from: components.url!)
         let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
         return Array(response.results.prefix(count)).map {
             Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0)
@@ -46,14 +59,14 @@ final class TMDBService {
             let candidates = try await fetchRevenueDiscoverPage(year: year, page: page)
             if candidates.isEmpty { break }
 
-            let pageVerified: [(MovieResult, Int)] = await withTaskGroup(of: (MovieResult, Int?).self) { group in
+            let pageVerified: [(MovieResult, Int)] = try await withThrowingTaskGroup(of: (MovieResult, Int?).self) { group in
                 for candidate in candidates {
                     group.addTask { [self] in
-                        (candidate, await fetchRevenue(for: candidate.id))
+                        (candidate, try await fetchRevenue(for: candidate.id))
                     }
                 }
                 var results: [(MovieResult, Int)] = []
-                for await (candidate, revenue) in group {
+                for try await (candidate, revenue) in group {
                     if let revenue, revenue > 0 {
                         results.append((candidate, revenue))
                     }
@@ -83,26 +96,25 @@ final class TMDBService {
             URLQueryItem(name: "vote_count.gte", value: "50"),
             URLQueryItem(name: "page", value: "\(page)")
         ]
-        let (data, _) = try await session.data(from: components.url!)
+        let data = try await fetchData(from: components.url!)
         return try JSONDecoder().decode(MovieDiscoverResponse.self, from: data).results
     }
 
-    private func fetchRevenue(for movieID: Int) async -> Int? {
+    /// nil when TMDB has no revenue figure for the film. A failed request
+    /// throws instead, so it fails the load rather than quietly dropping the
+    /// film from the ranking as if it had no box office data.
+    private func fetchRevenue(for movieID: Int) async throws -> Int? {
         if let cached = revenueCache[movieID] {
             return cached
         }
         let urlString = "\(Config.tmdbBaseURL)/movie/\(movieID)?api_key=\(Config.tmdbAPIKey)"
         guard let url = URL(string: urlString) else { return nil }
-        do {
-            let (data, _) = try await session.data(from: url)
-            let detail = try JSONDecoder().decode(MovieDetailResponse.self, from: data)
-            if let revenue = detail.revenue, revenue > 0 {
-                revenueCache[movieID] = revenue
-            }
-            return detail.revenue
-        } catch {
-            return nil
+        let data = try await fetchData(from: url)
+        let detail = try JSONDecoder().decode(MovieDetailResponse.self, from: data)
+        if let revenue = detail.revenue, revenue > 0 {
+            revenueCache[movieID] = revenue
         }
+        return detail.revenue
     }
 
     // MARK: - Audience Favorites
@@ -116,7 +128,7 @@ final class TMDBService {
             URLQueryItem(name: "vote_count.gte", value: "50"),
             URLQueryItem(name: "page", value: "1")
         ]
-        let (data, _) = try await session.data(from: components.url!)
+        let data = try await fetchData(from: components.url!)
         let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
         return Array(response.results.prefix(count)).map {
             Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0)
@@ -132,7 +144,7 @@ final class TMDBService {
             URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "include_adult", value: "false")
         ]
-        let (data, _) = try await session.data(from: components.url!)
+        let data = try await fetchData(from: components.url!)
         let response = try JSONDecoder().decode(MovieSearchResponse.self, from: data)
         return response.results
     }
@@ -146,10 +158,14 @@ final class TMDBService {
             URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
             URLQueryItem(name: "append_to_response", value: "credits")
         ]
-        let (data, _) = try await session.data(from: components.url!)
+        let data = try await fetchData(from: components.url!)
         let response = try JSONDecoder().decode(FilmDetailResponse.self, from: data)
         return FilmDetail(response: response)
     }
+}
+
+enum TMDBError: Error {
+    case badStatus(Int)
 }
 
 // MARK: - Private Decodable types

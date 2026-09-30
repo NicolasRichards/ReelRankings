@@ -48,20 +48,42 @@ extension UserMovie {
     /// `deduplicate` merge a stale value (say, Seen) back in on next launch.
     @MainActor
     static func update(_ movie: Movie, year: Int, in context: ModelContext, _ change: (UserMovie) -> Void) {
-        let id = movie.id
-        var records = (try? context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == id }))) ?? []
+        update(tmdbID: movie.id, title: movie.title, year: year, in: context, change)
+    }
+
+    /// `deletingIfEmpty: false` is for a screen that still shows the record
+    /// after the change, and would otherwise be left holding a deleted model.
+    @MainActor
+    static func update(tmdbID: Int, title: String, year: Int, in context: ModelContext,
+                       deletingIfEmpty: Bool = true, _ change: (UserMovie) -> Void) {
+        var records = allRecords(for: tmdbID, in: context)
         if records.isEmpty {
-            let record = UserMovie(tmdbID: movie.id, title: movie.title, year: year)
+            let record = UserMovie(tmdbID: tmdbID, title: title, year: year)
             context.insert(record)
             records = [record]
         }
         for record in records {
             change(record)
-            if !record.isSeen && !record.isOnWatchlist && record.userRating == 0 {
+            if deletingIfEmpty && !record.isSeen && !record.isOnWatchlist && record.userRating == 0 {
                 context.delete(record)
             }
         }
         try? context.save()
+    }
+
+    /// Removes the film and every synced duplicate of it, so it can't
+    /// reappear from a copy the user never saw.
+    @MainActor
+    static func removeAll(tmdbID: Int, in context: ModelContext) {
+        for record in allRecords(for: tmdbID, in: context) {
+            context.delete(record)
+        }
+        try? context.save()
+    }
+
+    @MainActor
+    private static func allRecords(for tmdbID: Int, in context: ModelContext) -> [UserMovie] {
+        (try? context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == tmdbID }))) ?? []
     }
 
     /// CloudKit-backed SwiftData can't enforce a unique constraint on tmdbID,
