@@ -17,7 +17,9 @@ class ContentViewModel: ObservableObject {
     private var loadGeneration = 0
 
     init() {
-        let currentYear = Calendar.current.component(.year, from: Date())
+        // Gregorian explicitly: Calendar.current follows the user's calendar
+        // setting (Buddhist, Japanese), but TMDB release years are Gregorian.
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
         let defaultYear = currentYear - 1
         self.selectedYear = defaultYear
         self.availableYears = Array(stride(from: defaultYear, through: 1929, by: -1))
