@@ -15,6 +15,7 @@ struct FilmDetailView: View {
     @State private var detail: FilmDetail?
     @State private var isLoading = false
     @State private var loadFailed = false
+    @State private var saveFailed = false
 
     private let service = TMDBService()
 
@@ -62,6 +63,7 @@ struct FilmDetailView: View {
                 .padding(.trailing, 16)
         }
         .preferredColorScheme(.dark)
+        .saveFailedAlert(isPresented: $saveFailed)
         .task { await load() }
     }
 
@@ -168,7 +170,7 @@ struct FilmDetailView: View {
                 iconColor: isSeen ? gold : Color.white.opacity(0.45),
                 label: isSeen ? "Seen" : "Mark as Seen"
             ) {
-                UserMovie.update(movie, year: year, in: modelContext) { $0.setSeen(!isSeen) }
+                edit { $0.setSeen(!isSeen) }
             }
 
             Divider().opacity(0.2)
@@ -180,7 +182,7 @@ struct FilmDetailView: View {
                 StarRatingView(rating: Binding(
                     get: { isSeen ? record?.userRating ?? 0 : 0 },
                     set: { newRating in
-                        UserMovie.update(movie, year: year, in: modelContext) { $0.setRating(newRating) }
+                        edit { $0.setRating(newRating) }
                     }
                 ))
             }
@@ -194,10 +196,16 @@ struct FilmDetailView: View {
                 iconColor: isOnWatchlist ? gold : Color.white.opacity(0.45),
                 label: isOnWatchlist ? "On Watchlist" : "Add to Watchlist"
             ) {
-                UserMovie.update(movie, year: year, in: modelContext) { $0.setOnWatchlist(!isOnWatchlist) }
+                edit { $0.setOnWatchlist(!isOnWatchlist) }
             }
         }
         .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func edit(_ change: (UserMovie) -> Void) {
+        if !UserMovie.update(movie, year: year, in: modelContext, change) {
+            saveFailed = true
+        }
     }
 
     private func controlRow(icon: String, iconColor: Color, label: String, action: @escaping () -> Void) -> some View {

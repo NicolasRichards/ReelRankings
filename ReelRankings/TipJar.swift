@@ -26,9 +26,15 @@ final class TipJar {
     private(set) var didTip = false
     /// A purchase came back `.pending` (Ask to Buy) and is waiting on approval.
     private(set) var awaitingApproval = false
+    /// The last purchase attempt threw — for example Screen Time blocks
+    /// in-app purchases, or the connection dropped mid-purchase.
+    private(set) var purchaseFailed = false
     var loadFailed = false
 
+    /// Called each time the tip screen appears.
     func load() async {
+        // A failure message belongs to the visit it happened in
+        purchaseFailed = false
         guard products.isEmpty else { return }
         isLoading = true
         loadFailed = false
@@ -63,6 +69,7 @@ final class TipJar {
 
     func purchase(_ product: Product) async {
         purchasing = product.id
+        purchaseFailed = false
         defer { purchasing = nil }
         do {
             let result = try await product.purchase()
@@ -81,7 +88,7 @@ final class TipJar {
                 break
             }
         } catch {
-            // A failed purchase is not worth interrupting the user over.
+            purchaseFailed = true
         }
     }
 }

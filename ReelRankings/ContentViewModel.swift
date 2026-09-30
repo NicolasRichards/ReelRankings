@@ -10,6 +10,8 @@ class ContentViewModel: ObservableObject {
     /// Set when the latest load failed; stays up until a retry or a new year.
     @Published var errorMessage: String? = nil
 
+    /// 1929 (when sound overtook silent film) through last year.
+    let yearRange: ClosedRange<Int>
     let availableYears: [Int]
 
     private let service = TMDBService()
@@ -23,7 +25,9 @@ class ContentViewModel: ObservableObject {
         let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
         let defaultYear = currentYear - 1
         self.selectedYear = defaultYear
-        self.availableYears = Array(stride(from: defaultYear, through: 1929, by: -1))
+        let range = 1929...max(defaultYear, 1929)
+        self.yearRange = range
+        self.availableYears = Array(range.reversed())
     }
 
     /// Starts loading the selected year, cancelling any load still in flight

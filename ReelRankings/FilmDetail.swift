@@ -70,15 +70,19 @@ struct FilmDetail: Codable, Sendable {
         }
     }
 
+    /// Always US formatting: the "$… million" wording is English, and a
+    /// device locale would otherwise give "$1,5 million" or "609.000 $".
     static func formattedDollars(_ amount: Int) -> String {
-        let value = Double(amount)
-        if value >= 1_000_000_000 {
-            return "$" + (value / 1_000_000_000).formatted(.number.precision(.fractionLength(0...2))) + " billion"
+        let us = Locale(identifier: "en_US")
+        let millions = Double(amount) / 1_000_000
+        // Decided on the rounded figure, so $999.96M reads "$1 billion", not "$1,000 million"
+        if (millions * 10).rounded() / 10 >= 1000 {
+            return "$" + (millions / 1000).formatted(.number.precision(.fractionLength(0...2)).locale(us)) + " billion"
         }
-        if value >= 1_000_000 {
-            return "$" + (value / 1_000_000).formatted(.number.precision(.fractionLength(0...1))) + " million"
+        if amount >= 1_000_000 {
+            return "$" + millions.formatted(.number.precision(.fractionLength(0...1)).locale(us)) + " million"
         }
-        return amount.formatted(.currency(code: "USD").precision(.fractionLength(0)))
+        return amount.formatted(.currency(code: "USD").precision(.fractionLength(0)).locale(us))
     }
 }
 
@@ -100,9 +104,9 @@ private extension Optional where Wrapped == Int {
 /// home: the OS may purge it under storage pressure, and every entry can be
 /// refetched on the next tap.
 enum FilmDetailCache {
-    static let maxAge: TimeInterval = 30 * 24 * 60 * 60
+    nonisolated static let maxAge: TimeInterval = 30 * 24 * 60 * 60
 
-    private static var directory: URL {
+    nonisolated private static var directory: URL {
         URL.cachesDirectory.appending(path: "FilmDetails", directoryHint: .isDirectory)
     }
 
@@ -123,7 +127,26 @@ enum FilmDetailCache {
         try? data.write(to: fileURL(for: detail.id), options: .atomic)
     }
 
+    /// A film released this year or last may still be in theaters, so its box
+    /// office figure goes stale within days; an older film's details don't.
     static func isFresh(_ detail: FilmDetail) -> Bool {
-        Date().timeIntervalSince(detail.fetchedAt) < maxAge
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
+        let isRecent = (detail.releaseYear ?? currentYear) >= currentYear - 1
+        let limit: TimeInterval = isRecent ? 24 * 60 * 60 : maxAge
+        return Date().timeIntervalSince(detail.fetchedAt) < limit
+    }
+
+    /// Deletes entries older than `maxAge`. An entry otherwise only gets
+    /// replaced when its film is opened again, so files for films viewed once
+    /// would stay forever.
+    nonisolated static func pruneExpired() {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        for file in files {
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, Date().timeIntervalSince(modified) > maxAge {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
     }
 }

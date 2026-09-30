@@ -3,6 +3,8 @@ import SwiftUI
 private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 
 struct MovieSearchView: View {
+    /// The years the app ranks; results outside it can't be jumped to.
+    let yearRange: ClosedRange<Int>
     /// Called with the release year of the tapped result; the caller handles navigation/dismissal.
     let onSelect: (Int) -> Void
 
@@ -104,8 +106,9 @@ struct MovieSearchView: View {
 
     @ViewBuilder
     private func resultRow(_ result: MovieSearchResult) -> some View {
+        let selectable = result.year.map(yearRange.contains) ?? false
         Button {
-            guard let year = result.year else { return }
+            guard let year = result.year, selectable else { return }
             onSelect(year)
             dismiss()
         } label: {
@@ -113,14 +116,14 @@ struct MovieSearchView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(result.title)
                         .font(.subheadline)
-                        .foregroundStyle(result.year != nil ? .white : Color.white.opacity(0.4))
+                        .foregroundStyle(selectable ? .white : Color.white.opacity(0.4))
                         .multilineTextAlignment(.leading)
-                    Text(result.year.map(String.init) ?? "Unknown year")
+                    Text(yearLabel(for: result.year))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if result.year != nil {
+                if selectable {
                     Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -131,11 +134,18 @@ struct MovieSearchView: View {
             .background(Color(white: 0.13))
         }
         .buttonStyle(.plain)
-        .disabled(result.year == nil)
+        .disabled(!selectable)
 
         if result.id != results.last?.id {
             Divider().opacity(0.2)
         }
+    }
+
+    private func yearLabel(for year: Int?) -> String {
+        guard let year else { return "Unknown year" }
+        if year > yearRange.upperBound { return "\(year) · not ranked yet" }
+        if year < yearRange.lowerBound { return "\(year) · before \(yearRange.lowerBound)" }
+        return String(year)
     }
 
     private func search(for query: String) async {
@@ -147,11 +157,12 @@ struct MovieSearchView: View {
             return
         }
 
-        try? await Task.sleep(for: .milliseconds(350))
-        guard !Task.isCancelled, trimmed == self.query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-
+        // Spinner from the first keystroke: during the debounce the view
+        // would otherwise say "No results" or show the previous query's results
         isSearching = true
         errorMessage = nil
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled, trimmed == self.query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
         do {
             let found = try await service.searchMovies(query: trimmed)
             guard !Task.isCancelled else { return }

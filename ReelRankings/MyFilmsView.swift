@@ -180,6 +180,7 @@ private struct MyFilmsEditSheet: View {
     @State private var isOnWatchlist: Bool = false
     @State private var isSeen: Bool = false
     @State private var userRating: Int = 0
+    @State private var saveFailed = false
 
     var body: some View {
         ZStack {
@@ -245,8 +246,11 @@ private struct MyFilmsEditSheet: View {
                 .padding(.horizontal, 20)
 
                 Button(role: .destructive) {
-                    UserMovie.removeAll(tmdbID: record.tmdbID, in: modelContext)
-                    dismiss()
+                    if UserMovie.removeAll(tmdbID: record.tmdbID, in: modelContext) {
+                        dismiss()
+                    } else {
+                        saveFailed = true
+                    }
                 } label: {
                     Label("Remove from My Films", systemImage: "trash")
                         .font(.subheadline)
@@ -265,11 +269,14 @@ private struct MyFilmsEditSheet: View {
         .presentationDetents([.medium])
         .presentationDragIndicator(.hidden)
         .preferredColorScheme(.dark)
-        .onAppear {
-            isOnWatchlist = record.isOnWatchlist
-            isSeen = record.isSeen
-            userRating = record.userRating
-        }
+        .saveFailedAlert(isPresented: $saveFailed)
+        .onAppear(perform: showStoredValues)
+    }
+
+    private func showStoredValues() {
+        isOnWatchlist = record.isOnWatchlist
+        isSeen = record.isSeen
+        userRating = record.userRating
     }
 
     private func optionRow(icon: String, iconColor: Color, label: String, action: @escaping () -> Void) -> some View {
@@ -291,11 +298,16 @@ private struct MyFilmsEditSheet: View {
     private func save() {
         // Every synced duplicate gets the change, or the launch-time merge
         // would bring a stale value (say, Seen) back
-        UserMovie.update(tmdbID: record.tmdbID, title: record.title, year: record.year,
-                         in: modelContext, deletingIfEmpty: false) {
+        let saved = UserMovie.update(tmdbID: record.tmdbID, title: record.title, year: record.year,
+                                     in: modelContext, deletingIfEmpty: false) {
             $0.isOnWatchlist = isOnWatchlist
             $0.isSeen = isSeen
             $0.userRating = userRating
+        }
+        if !saved {
+            // The change was rolled back; put the controls back to match
+            showStoredValues()
+            saveFailed = true
         }
     }
 }

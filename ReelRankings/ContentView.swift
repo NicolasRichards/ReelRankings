@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showingMyFilms = false
     @State private var showingSearch = false
     @State private var detailMovie: Movie?
+    @State private var saveFailed = false
 
     private var userMovieByID: [Int: UserMovie] { userMovies.canonicalByTMDBID }
 
@@ -146,11 +147,8 @@ struct ContentView: View {
                 MyFilmsView()
             }
             .sheet(isPresented: $showingSearch) {
-                MovieSearchView { year in
-                    let bounds = viewModel.availableYears
-                    let minYear = bounds.last ?? year
-                    let maxYear = bounds.first ?? year
-                    viewModel.selectedYear = min(max(year, minYear), maxYear)
+                MovieSearchView(yearRange: viewModel.yearRange) { year in
+                    viewModel.selectedYear = year
                 }
             }
             .sheet(isPresented: $showingAbout) {
@@ -158,6 +156,7 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .saveFailedAlert(isPresented: $saveFailed)
         .task {
             viewModel.reload(depth: listDepth)
         }
@@ -171,7 +170,9 @@ struct ContentView: View {
 
     private func toggleSeen(_ movie: Movie) {
         let isSeen = userMovieByID[movie.id]?.isSeen == true
-        UserMovie.update(movie, year: viewModel.selectedYear, in: modelContext) { $0.setSeen(!isSeen) }
+        if !UserMovie.update(movie, year: viewModel.selectedYear, in: modelContext, { $0.setSeen(!isSeen) }) {
+            saveFailed = true
+        }
     }
 }
 
@@ -318,6 +319,12 @@ private struct AboutView: View {
                     ForEach(tipJar.products, id: \.id) { product in
                         tipRow(reels: reelCount(for: product), product: product)
                     }
+                    if tipJar.purchaseFailed {
+                        Text("That purchase couldn't be completed.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
             }
             .padding(16)
@@ -399,6 +406,19 @@ private struct AboutView: View {
         if product.id.hasSuffix(".small") { return 1 }
         if product.id.hasSuffix(".medium") { return 2 }
         return 3
+    }
+}
+
+// MARK: - Save failure
+
+extension View {
+    /// Shown where an edit was made when saving it failed and it was rolled back.
+    func saveFailedAlert(isPresented: Binding<Bool>) -> some View {
+        alert("Couldn't Save", isPresented: isPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your change wasn't saved. Your device may be out of storage.")
+        }
     }
 }
 

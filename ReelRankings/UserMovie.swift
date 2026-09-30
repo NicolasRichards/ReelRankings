@@ -46,16 +46,17 @@ extension UserMovie {
     /// deletes the record instead if the change left nothing worth keeping.
     /// Every synced duplicate gets the same change: editing only one would let
     /// `deduplicate` merge a stale value (say, Seen) back in on next launch.
-    @MainActor
-    static func update(_ movie: Movie, year: Int, in context: ModelContext, _ change: (UserMovie) -> Void) {
+    /// Returns false if the change couldn't be saved; it has been rolled back.
+    @MainActor @discardableResult
+    static func update(_ movie: Movie, year: Int, in context: ModelContext, _ change: (UserMovie) -> Void) -> Bool {
         update(tmdbID: movie.id, title: movie.title, year: year, in: context, change)
     }
 
     /// `deletingIfEmpty: false` is for a screen that still shows the record
     /// after the change, and would otherwise be left holding a deleted model.
-    @MainActor
+    @MainActor @discardableResult
     static func update(tmdbID: Int, title: String, year: Int, in context: ModelContext,
-                       deletingIfEmpty: Bool = true, _ change: (UserMovie) -> Void) {
+                       deletingIfEmpty: Bool = true, _ change: (UserMovie) -> Void) -> Bool {
         var records = allRecords(for: tmdbID, in: context)
         if records.isEmpty {
             let record = UserMovie(tmdbID: tmdbID, title: title, year: year)
@@ -68,17 +69,31 @@ extension UserMovie {
                 context.delete(record)
             }
         }
-        try? context.save()
+        return save(context)
     }
 
     /// Removes the film and every synced duplicate of it, so it can't
     /// reappear from a copy the user never saw.
-    @MainActor
-    static func removeAll(tmdbID: Int, in context: ModelContext) {
+    @MainActor @discardableResult
+    static func removeAll(tmdbID: Int, in context: ModelContext) -> Bool {
         for record in allRecords(for: tmdbID, in: context) {
             context.delete(record)
         }
-        try? context.save()
+        return save(context)
+    }
+
+    /// A failed save (say, the device is out of storage) is rolled back, so
+    /// the screen shows what is actually stored instead of a change that
+    /// would vanish on the next launch.
+    @MainActor
+    private static func save(_ context: ModelContext) -> Bool {
+        do {
+            try context.save()
+            return true
+        } catch {
+            context.rollback()
+            return false
+        }
     }
 
     @MainActor
@@ -105,7 +120,7 @@ extension UserMovie {
             }
             didMerge = true
         }
-        if didMerge { try? context.save() }
+        if didMerge { _ = save(context) }
     }
 }
 
