@@ -65,13 +65,19 @@ struct ContentView: View {
                         // Two-column movie lists
                         ScrollView {
                             HStack(alignment: .top, spacing: 0) {
-                                MovieListView(
-                                    movies: viewModel.boxOfficeMovies,
-                                    targetCount: listDepth,
-                                    userMovieByID: userMovieByID,
-                                    onToggleSeen: toggleSeen,
-                                    onSelect: { detailMovie = $0 }
-                                )
+                                if viewModel.boxOfficeFailed {
+                                    ColumnErrorView(message: "Box office figures couldn't load.") {
+                                        viewModel.reload(depth: listDepth)
+                                    }
+                                } else {
+                                    MovieListView(
+                                        movies: viewModel.boxOfficeMovies,
+                                        targetCount: listDepth,
+                                        userMovieByID: userMovieByID,
+                                        onToggleSeen: toggleSeen,
+                                        onSelect: { detailMovie = $0 }
+                                    )
+                                }
                                 Divider()
                                 MovieListView(
                                     movies: viewModel.audienceMovies,
@@ -439,16 +445,43 @@ private struct LoadErrorView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button(action: onRetry) {
-                Label("Retry", systemImage: "arrow.clockwise")
-                    .font(.subheadline.bold())
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 9)
-                    .background(gold.opacity(0.18), in: Capsule())
-            }
-            .foregroundStyle(gold)
+            RetryButton(action: onRetry)
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// One column's failure when the other column loaded fine.
+private struct ColumnErrorView: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            RetryButton(action: onRetry)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 40)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+struct RetryButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Retry", systemImage: "arrow.clockwise")
+                .font(.subheadline.bold())
+                .padding(.horizontal, 18)
+                .padding(.vertical, 9)
+                .background(gold.opacity(0.18), in: Capsule())
+        }
+        .foregroundStyle(gold)
     }
 }

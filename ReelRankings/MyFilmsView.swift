@@ -8,7 +8,7 @@ struct MyFilmsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @State private var editingMovie: UserMovie?
+    @State private var editing: EditTarget?
     @State private var seenSort: SeenSort = .year
 
     enum SeenSort { case year, rating }
@@ -111,9 +111,8 @@ struct MyFilmsView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(item: $editingMovie) { record in
-            // Re-use options sheet via a thin adapter
-            MyFilmsEditSheet(record: record)
+        .sheet(item: $editing) { target in
+            MyFilmsEditSheet(target: target)
         }
     }
 
@@ -128,7 +127,7 @@ struct MyFilmsView: View {
             VStack(spacing: 1) {
                 ForEach(movies) { record in
                     Button {
-                        editingMovie = record
+                        editing = EditTarget(tmdbID: record.tmdbID, title: record.title, year: record.year)
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -171,16 +170,34 @@ struct MyFilmsView: View {
     }
 }
 
-// Thin wrapper so MyFilmsView can present a sheet using a UserMovie directly
+/// The film an edit sheet is for, as plain values: a sheet holding the model
+/// itself could be left pointing at a record deleted by sync or another window.
+private struct EditTarget: Identifiable {
+    let tmdbID: Int
+    let title: String
+    let year: Int
+    var id: Int { tmdbID }
+}
+
+/// Reads the film's record live and edits it through the same helpers as the
+/// film detail screen, so both screens follow the same rules and every
+/// synced duplicate gets the change.
 private struct MyFilmsEditSheet: View {
-    let record: UserMovie
+    let target: EditTarget
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-
-    @State private var isOnWatchlist: Bool = false
-    @State private var isSeen: Bool = false
-    @State private var userRating: Int = 0
+    @Query private var records: [UserMovie]
     @State private var saveFailed = false
+
+    init(target: EditTarget) {
+        self.target = target
+        let id = target.tmdbID
+        _records = Query(filter: #Predicate<UserMovie> { $0.tmdbID == id }, sort: \.dateAdded)
+    }
+
+    private var record: UserMovie? { records.first }
+    private var isSeen: Bool { record?.isSeen == true }
+    private var isOnWatchlist: Bool { record?.isOnWatchlist == true }
 
     var body: some View {
         ZStack {
@@ -193,7 +210,7 @@ private struct MyFilmsEditSheet: View {
                     .padding(.top, 12)
                     .padding(.bottom, 20)
 
-                Text(record.title)
+                Text(target.title)
                     .font(.title3.bold())
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
@@ -206,9 +223,8 @@ private struct MyFilmsEditSheet: View {
                         iconColor: isOnWatchlist ? gold : .secondary,
                         label: isOnWatchlist ? "On Watchlist" : "Add to Watchlist"
                     ) {
-                        isOnWatchlist.toggle()
-                        if isOnWatchlist { isSeen = false; userRating = 0 }
-                        save()
+                        let onWatchlist = !isOnWatchlist
+                        edit { $0.setOnWatchlist(onWatchlist) }
                     }
 
                     Divider().opacity(0.2)
@@ -218,10 +234,8 @@ private struct MyFilmsEditSheet: View {
                         iconColor: isSeen ? .green : .secondary,
                         label: isSeen ? "Seen It" : "Mark as Seen"
                     ) {
-                        isSeen.toggle()
-                        if isSeen { isOnWatchlist = false }
-                        if !isSeen { userRating = 0 }
-                        save()
+                        let seen = !isSeen
+                        edit { $0.setSeen(seen) }
                     }
 
                     if isSeen {
@@ -230,11 +244,9 @@ private struct MyFilmsEditSheet: View {
                             Text("My Rating")
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            // Saves on a tap only: .onChange would also fire when
-                            // onAppear loads the rating, overwriting duplicates
                             StarRatingView(rating: Binding(
-                                get: { userRating },
-                                set: { userRating = $0; save() }
+                                get: { record?.userRating ?? 0 },
+                                set: { newRating in edit { $0.setRating(newRating) } }
                             ))
                         }
                         .padding(.horizontal, 20)
@@ -246,7 +258,7 @@ private struct MyFilmsEditSheet: View {
                 .padding(.horizontal, 20)
 
                 Button(role: .destructive) {
-                    if UserMovie.removeAll(tmdbID: record.tmdbID, in: modelContext) {
+                    if UserMovie.removeAll(tmdbID: target.tmdbID, in: modelContext) {
                         dismiss()
                     } else {
                         saveFailed = true
@@ -270,13 +282,19 @@ private struct MyFilmsEditSheet: View {
         .presentationDragIndicator(.hidden)
         .preferredColorScheme(.dark)
         .saveFailedAlert(isPresented: $saveFailed)
-        .onAppear(perform: showStoredValues)
+        // Deleted elsewhere (sync, or another iPad window): nothing left to edit
+        .onChange(of: records.isEmpty) { _, isEmpty in
+            if isEmpty { dismiss() }
+        }
     }
 
-    private func showStoredValues() {
-        isOnWatchlist = record.isOnWatchlist
-        isSeen = record.isSeen
-        userRating = record.userRating
+    /// `change` runs once per synced duplicate, so callers pass a value
+    /// computed beforehand rather than reading `isSeen` inside it.
+    private func edit(_ change: (UserMovie) -> Void) {
+        let saved = UserMovie.update(tmdbID: target.tmdbID, title: target.title, year: target.year,
+                                     in: modelContext, creatingIfMissing: false, deletingIfEmpty: false,
+                                     change)
+        if !saved { saveFailed = true }
     }
 
     private func optionRow(icon: String, iconColor: Color, label: String, action: @escaping () -> Void) -> some View {
@@ -293,21 +311,5 @@ private struct MyFilmsEditSheet: View {
             .padding(.vertical, 14)
         }
         .buttonStyle(.plain)
-    }
-
-    private func save() {
-        // Every synced duplicate gets the change, or the launch-time merge
-        // would bring a stale value (say, Seen) back
-        let saved = UserMovie.update(tmdbID: record.tmdbID, title: record.title, year: record.year,
-                                     in: modelContext, deletingIfEmpty: false) {
-            $0.isOnWatchlist = isOnWatchlist
-            $0.isSeen = isSeen
-            $0.userRating = userRating
-        }
-        if !saved {
-            // The change was rolled back; put the controls back to match
-            showStoredValues()
-            saveFailed = true
-        }
     }
 }

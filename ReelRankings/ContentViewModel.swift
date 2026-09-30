@@ -9,6 +9,8 @@ class ContentViewModel: ObservableObject {
     @Published var isLoading = false
     /// Set when the latest load failed; stays up until a retry or a new year.
     @Published var errorMessage: String? = nil
+    /// Only the Box Office list failed: Audience Favorites loaded and stays up.
+    @Published var boxOfficeFailed = false
 
     /// 1929 (when sound overtook silent film) through last year.
     let yearRange: ClosedRange<Int>
@@ -43,24 +45,33 @@ class ContentViewModel: ObservableObject {
         let year = selectedYear
         isLoading = true
         errorMessage = nil
+        boxOfficeFailed = false
         boxOfficeMovies = []
         audienceMovies = []
 
-        do {
-            // Fetch both lists concurrently
-            async let boxOffice = service.fetchBoxOfficeTop(year: year, count: depth)
-            async let audience = service.fetchAudienceTop(year: year, count: depth)
-            let (bo, aud) = try await (boxOffice, audience)
+        // Fetch both lists concurrently, but let them fail separately: the
+        // pre-1939 Box Office check makes dozens of requests, and one failing
+        // shouldn't take down an Audience list that loaded fine.
+        async let boxOffice = service.fetchBoxOfficeTop(year: year, count: depth)
+        async let audience = service.fetchAudienceTop(year: year, count: depth)
 
-            guard generation == loadGeneration else { return }
-            boxOfficeMovies = bo
-            audienceMovies = aud
-            isLoading = false
+        let aud: [Movie]
+        do {
+            aud = try await audience
         } catch {
             guard generation == loadGeneration else { return }
             isLoading = false
             errorMessage = "Couldn't load \(year). Check your connection and try again."
+            return
         }
+
+        let bo = try? await boxOffice
+
+        guard generation == loadGeneration else { return }
+        boxOfficeMovies = bo ?? []
+        boxOfficeFailed = bo == nil
+        audienceMovies = aud
+        isLoading = false
     }
 
     /// A film's places in the currently displayed lists, e.g. #3 Box Office.

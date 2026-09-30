@@ -46,19 +46,26 @@ extension UserMovie {
     /// deletes the record instead if the change left nothing worth keeping.
     /// Every synced duplicate gets the same change: editing only one would let
     /// `deduplicate` merge a stale value (say, Seen) back in on next launch.
-    /// Returns false if the change couldn't be saved; it has been rolled back.
-    @MainActor @discardableResult
+    /// Returns false if the change couldn't be made or saved; a failed save
+    /// has been rolled back.
+    @MainActor
     static func update(_ movie: Movie, year: Int, in context: ModelContext, _ change: (UserMovie) -> Void) -> Bool {
         update(tmdbID: movie.id, title: movie.title, year: year, in: context, change)
     }
 
-    /// `deletingIfEmpty: false` is for a screen that still shows the record
-    /// after the change, and would otherwise be left holding a deleted model.
-    @MainActor @discardableResult
+    /// `creatingIfMissing: false` is for a screen editing a film that already
+    /// exists: if it was deleted meanwhile, nothing is re-created from stale
+    /// values. `deletingIfEmpty: false` keeps a record the screen is still
+    /// showing, so the user can toggle a change straight back.
+    @MainActor
     static func update(tmdbID: Int, title: String, year: Int, in context: ModelContext,
-                       deletingIfEmpty: Bool = true, _ change: (UserMovie) -> Void) -> Bool {
-        var records = allRecords(for: tmdbID, in: context)
+                       creatingIfMissing: Bool = true, deletingIfEmpty: Bool = true,
+                       _ change: (UserMovie) -> Void) -> Bool {
+        // A failed lookup must not look like "no records yet", which would
+        // insert a duplicate instead of editing the existing one
+        guard var records = try? allRecords(for: tmdbID, in: context) else { return false }
         if records.isEmpty {
+            guard creatingIfMissing else { return true }
             let record = UserMovie(tmdbID: tmdbID, title: title, year: year)
             context.insert(record)
             records = [record]
@@ -73,10 +80,12 @@ extension UserMovie {
     }
 
     /// Removes the film and every synced duplicate of it, so it can't
-    /// reappear from a copy the user never saw.
-    @MainActor @discardableResult
+    /// reappear from a copy the user never saw. Returns false if the records
+    /// couldn't be looked up or the deletion couldn't be saved.
+    @MainActor
     static func removeAll(tmdbID: Int, in context: ModelContext) -> Bool {
-        for record in allRecords(for: tmdbID, in: context) {
+        guard let records = try? allRecords(for: tmdbID, in: context) else { return false }
+        for record in records {
             context.delete(record)
         }
         return save(context)
@@ -97,8 +106,8 @@ extension UserMovie {
     }
 
     @MainActor
-    private static func allRecords(for tmdbID: Int, in context: ModelContext) -> [UserMovie] {
-        (try? context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == tmdbID }))) ?? []
+    private static func allRecords(for tmdbID: Int, in context: ModelContext) throws -> [UserMovie] {
+        try context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == tmdbID }))
     }
 
     /// CloudKit-backed SwiftData can't enforce a unique constraint on tmdbID,

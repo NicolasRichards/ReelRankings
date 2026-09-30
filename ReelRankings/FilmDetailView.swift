@@ -170,7 +170,8 @@ struct FilmDetailView: View {
                 iconColor: isSeen ? gold : Color.white.opacity(0.45),
                 label: isSeen ? "Seen" : "Mark as Seen"
             ) {
-                edit { $0.setSeen(!isSeen) }
+                let seen = !isSeen
+                edit { $0.setSeen(seen) }
             }
 
             Divider().opacity(0.2)
@@ -196,12 +197,16 @@ struct FilmDetailView: View {
                 iconColor: isOnWatchlist ? gold : Color.white.opacity(0.45),
                 label: isOnWatchlist ? "On Watchlist" : "Add to Watchlist"
             ) {
-                edit { $0.setOnWatchlist(!isOnWatchlist) }
+                let onWatchlist = !isOnWatchlist
+                edit { $0.setOnWatchlist(onWatchlist) }
             }
         }
         .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 12))
     }
 
+    /// `change` runs once per synced duplicate, so it must apply a value
+    /// computed beforehand: reading `isSeen` inside it would see the first
+    /// duplicate's new value and flip the rest the other way.
     private func edit(_ change: (UserMovie) -> Void) {
         if !UserMovie.update(movie, year: year, in: modelContext, change) {
             saveFailed = true

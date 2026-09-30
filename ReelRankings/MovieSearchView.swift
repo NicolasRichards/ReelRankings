@@ -161,8 +161,10 @@ struct MovieSearchView: View {
         // would otherwise say "No results" or show the previous query's results
         isSearching = true
         errorMessage = nil
+        // Returning here leaves the spinner up on purpose: a cancelled task means
+        // the query changed, and .task(id:) has already started its replacement.
         try? await Task.sleep(for: .milliseconds(350))
-        guard !Task.isCancelled, trimmed == self.query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+        guard !Task.isCancelled else { return }
         do {
             let found = try await service.searchMovies(query: trimmed)
             guard !Task.isCancelled else { return }
