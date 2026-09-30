@@ -169,6 +169,18 @@ final class TMDBService {
         return response.results
     }
 
+    // MARK: - Release Year
+
+    /// The film's release year, or nil if TMDB doesn't know it.
+    func fetchReleaseYear(id: Int) async throws -> Int? {
+        var components = URLComponents(string: "\(Config.tmdbBaseURL)/movie/\(id)")!
+        components.queryItems = [URLQueryItem(name: "api_key", value: Config.tmdbAPIKey)]
+        let data = try await fetchData(from: components.url!)
+        let date = try JSONDecoder().decode(ReleaseDateResponse.self, from: data).release_date
+        guard let date, date.count >= 4 else { return nil }
+        return Int(date.prefix(4))
+    }
+
     // MARK: - Film Detail
 
     /// One request per tapped film; `credits` rides along via append_to_response.
@@ -203,6 +215,10 @@ struct MovieResult: Decodable, Sendable {
 
 struct MovieDetailResponse: Decodable, Sendable {
     let revenue: Int?
+}
+
+struct ReleaseDateResponse: Decodable, Sendable {
+    let release_date: String?
 }
 
 struct MovieSearchResponse: Decodable, Sendable {

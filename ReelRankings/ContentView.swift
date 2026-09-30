@@ -423,7 +423,7 @@ extension View {
         alert("Couldn't Save", isPresented: isPresented) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Your change wasn't saved. Your device may be out of storage.")
+            Text("Your change wasn't saved. Please try again.")
         }
     }
 }

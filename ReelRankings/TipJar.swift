@@ -87,6 +87,9 @@ final class TipJar {
             @unknown default:
                 break
             }
+        } catch StoreKitError.userCancelled {
+            // Cancelling the Apple Account sign-in arrives as a thrown error
+            // rather than a .userCancelled result; it isn't a failure either way
         } catch {
             purchaseFailed = true
         }

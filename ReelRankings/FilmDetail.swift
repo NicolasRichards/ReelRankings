@@ -105,6 +105,9 @@ private extension Optional where Wrapped == Int {
 /// refetched on the next tap.
 enum FilmDetailCache {
     nonisolated static let maxAge: TimeInterval = 30 * 24 * 60 * 60
+    /// Well past `maxAge`, so an expired entry can still stand in while
+    /// offline (see `load(id:)`) before it's cleaned up.
+    nonisolated static let pruneAge: TimeInterval = 180 * 24 * 60 * 60
 
     nonisolated private static var directory: URL {
         URL.cachesDirectory.appending(path: "FilmDetails", directoryHint: .isDirectory)
@@ -136,7 +139,7 @@ enum FilmDetailCache {
         return Date().timeIntervalSince(detail.fetchedAt) < limit
     }
 
-    /// Deletes entries older than `maxAge`. An entry otherwise only gets
+    /// Deletes entries older than `pruneAge`. An entry otherwise only gets
     /// replaced when its film is opened again, so files for films viewed once
     /// would stay forever.
     nonisolated static func pruneExpired() {
@@ -144,7 +147,7 @@ enum FilmDetailCache {
             at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         for file in files {
             let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-            if let modified, Date().timeIntervalSince(modified) > maxAge {
+            if let modified, Date().timeIntervalSince(modified) > pruneAge {
                 try? FileManager.default.removeItem(at: file)
             }
         }

@@ -91,18 +91,15 @@ extension UserMovie {
         return save(context)
     }
 
-    /// A failed save (say, the device is out of storage) is rolled back, so
-    /// the screen shows what is actually stored instead of a change that
-    /// would vanish on the next launch.
+    /// Tries twice, since a save can briefly collide with an iCloud import.
+    /// If both fail the change is rolled back, so the screen shows what is
+    /// actually stored instead of a change that would vanish on relaunch.
     @MainActor
     private static func save(_ context: ModelContext) -> Bool {
-        do {
-            try context.save()
-            return true
-        } catch {
-            context.rollback()
-            return false
-        }
+        if (try? context.save()) != nil { return true }
+        if (try? context.save()) != nil { return true }
+        context.rollback()
+        return false
     }
 
     @MainActor
@@ -130,6 +127,42 @@ extension UserMovie {
             didMerge = true
         }
         if didMerge { _ = save(context) }
+    }
+}
+
+extension UserMovie {
+    @MainActor private static var isRepairingYears = false
+
+    /// Builds before 1.5 (10) took the year from the phone's calendar, so a
+    /// Buddhist-calendar user browsing "2568" (which showed TMDB's all-time
+    /// lists) saved films under that year. The saved year can't be converted,
+    /// since it's the year that was browsed rather than the film's own, so
+    /// each such film's release year is looked up. Anything left unfixed
+    /// (offline, TMDB error) is retried the next time the app comes forward.
+    @MainActor
+    static func repairOutOfRangeYears(in context: ModelContext) async {
+        guard !isRepairingYears else { return }
+        isRepairingYears = true
+        defer { isRepairingYears = false }
+
+        // Only years no film can have: a real release year before 1929 (a film
+        // marked from those all-time lists) is correct and mustn't be re-fetched
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
+        let valid = 1870...currentYear
+        guard let all = try? context.fetch(FetchDescriptor<UserMovie>()) else { return }
+        let broken = all.filter { !valid.contains($0.year) }
+        guard !broken.isEmpty else { return }
+
+        let service = TMDBService()
+        for tmdbID in Set(broken.map(\.tmdbID)) {
+            guard let year = try? await service.fetchReleaseYear(id: tmdbID) else { continue }
+            // Re-read after the await: sync or an edit may have changed the records
+            for record in (try? context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == tmdbID }))) ?? []
+            where !valid.contains(record.year) {
+                record.year = year
+            }
+        }
+        _ = save(context)
     }
 }
 

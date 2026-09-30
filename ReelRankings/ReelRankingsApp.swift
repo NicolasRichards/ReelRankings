@@ -48,6 +48,7 @@ struct ReelRankingsApp: App {
                 reopenPersistentStore()
             }
             UserMovie.deduplicate(in: container.mainContext)
+            Task { await UserMovie.repairOutOfRangeYears(in: container.mainContext) }
         }
     }
 
