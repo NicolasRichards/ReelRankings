@@ -67,7 +67,7 @@ struct ContentView: View {
                             HStack(alignment: .top, spacing: 0) {
                                 if viewModel.boxOfficeFailed {
                                     ColumnErrorView(message: "Box office figures couldn't load.") {
-                                        viewModel.reload(depth: listDepth)
+                                        viewModel.retryBoxOffice(depth: listDepth)
                                     }
                                 } else {
                                     MovieListView(

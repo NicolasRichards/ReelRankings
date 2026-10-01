@@ -282,6 +282,7 @@ private struct MyFilmsEditSheet: View {
         .presentationDragIndicator(.hidden)
         .preferredColorScheme(.dark)
         .saveFailedAlert(isPresented: $saveFailed)
+        .onDisappear { UserMovie.removeIfEmpty(tmdbID: target.tmdbID, in: modelContext) }
         // Deleted elsewhere (sync, or another iPad window): nothing left to edit
         .onChange(of: records.isEmpty) { _, isEmpty in
             if isEmpty { dismiss() }

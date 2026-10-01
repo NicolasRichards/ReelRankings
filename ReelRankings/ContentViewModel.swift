@@ -41,6 +41,24 @@ class ContentViewModel: ObservableObject {
         loadTask = Task { await loadMovies(depth: depth, generation: generation) }
     }
 
+    /// Retries only the Box Office column, leaving Audience Favorites (which
+    /// loaded fine) on screen.
+    func retryBoxOffice(depth: Int) {
+        loadTask?.cancel()
+        loadGeneration += 1
+        let generation = loadGeneration
+        let year = selectedYear
+        boxOfficeFailed = false
+        isLoading = true
+        loadTask = Task {
+            let bo = try? await service.fetchBoxOfficeTop(year: year, count: depth)
+            guard generation == loadGeneration else { return }
+            boxOfficeMovies = bo ?? []
+            boxOfficeFailed = bo == nil
+            isLoading = false
+        }
+    }
+
     private func loadMovies(depth: Int, generation: Int) async {
         let year = selectedYear
         isLoading = true

@@ -72,7 +72,7 @@ extension UserMovie {
         }
         for record in records {
             change(record)
-            if deletingIfEmpty && !record.isSeen && !record.isOnWatchlist && record.userRating == 0 {
+            if deletingIfEmpty && record.isEmpty {
                 context.delete(record)
             }
         }
@@ -109,24 +109,62 @@ extension UserMovie {
 
     /// CloudKit-backed SwiftData can't enforce a unique constraint on tmdbID,
     /// so independent edits on two devices can sync into duplicate records.
-    /// Merges each duplicate group into its oldest record and deletes the rest.
+    /// Merges each duplicate group into its oldest record and deletes the rest,
+    /// then deletes records with nothing left in them (the My Films sheet keeps
+    /// an emptied record while it's open; older builds left them behind).
     @MainActor
     static func deduplicate(in context: ModelContext) {
         guard let all = try? context.fetch(FetchDescriptor<UserMovie>()) else { return }
-        var didMerge = false
+        var changed = false
         for (_, records) in Dictionary(grouping: all, by: \.tmdbID) where records.count > 1 {
             let sorted = records.sorted { $0.dateAdded < $1.dateAdded }
             let keeper = sorted[0]
             keeper.isSeen = records.contains { $0.isSeen }
-            // Seen and watchlist are mutually exclusive; rating only applies to seen films
+            // Seen and watchlist are mutually exclusive
             keeper.isOnWatchlist = keeper.isSeen ? false : records.contains { $0.isOnWatchlist }
-            keeper.userRating = keeper.isSeen ? (records.map(\.userRating).max() ?? 0) : 0
+            // A seen film takes its rating from the seen copies. An unseen one
+            // keeps the hidden rating, so marking it seen again brings it back
+            // (the same promise setSeen makes).
+            let candidates = keeper.isSeen ? records.filter(\.isSeen) : records
+            keeper.userRating = candidates.map(\.userRating).max() ?? 0
             for duplicate in sorted.dropFirst() {
                 context.delete(duplicate)
             }
-            didMerge = true
+            changed = true
         }
-        if didMerge { _ = save(context) }
+        for record in all where !record.isDeleted && record.isEmpty {
+            context.delete(record)
+            changed = true
+        }
+        if changed { _ = save(context) }
+    }
+
+    var isEmpty: Bool { !isSeen && !isOnWatchlist && userRating == 0 }
+
+    /// For a screen that kept an emptied record while open: deletes the
+    /// film's records if nothing is left in them.
+    @MainActor
+    static func removeIfEmpty(tmdbID: Int, in context: ModelContext) {
+        guard let records = try? allRecords(for: tmdbID, in: context) else { return }
+        let empty = records.filter(\.isEmpty)
+        guard !empty.isEmpty else { return }
+        empty.forEach(context.delete)
+        _ = save(context)
+    }
+
+    /// Copies every record into another store, keeping their dates.
+    @MainActor
+    static func copyAll(from source: ModelContext, to destination: ModelContext) {
+        guard let records = try? source.fetch(FetchDescriptor<UserMovie>()), !records.isEmpty else { return }
+        for record in records {
+            let copy = UserMovie(tmdbID: record.tmdbID, title: record.title, year: record.year)
+            copy.isSeen = record.isSeen
+            copy.isOnWatchlist = record.isOnWatchlist
+            copy.userRating = record.userRating
+            copy.dateAdded = record.dateAdded
+            destination.insert(copy)
+        }
+        _ = save(destination)
     }
 }
 

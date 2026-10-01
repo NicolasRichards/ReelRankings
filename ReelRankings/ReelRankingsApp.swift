@@ -11,6 +11,10 @@ struct ReelRankingsApp: App {
     /// temporary in-memory store until it can.
     @State private var usingTemporaryStore: Bool
     @State private var showingTemporaryStoreAlert = false
+    /// Retry opening the store only on launch and after a real trip to the
+    /// background: a Control Center pull is also inactive -> active, and
+    /// retrying (and re-warning) on each of those helps nobody.
+    @State private var shouldRetryStore = true
 
     private static let schema = Schema([UserMovie.self])
     private static let log = Logger(subsystem: "NickRichards.ReelRankings", category: "storage")
@@ -43,8 +47,10 @@ struct ReelRankingsApp: App {
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background { shouldRetryStore = true }
             guard phase == .active else { return }
-            if usingTemporaryStore {
+            if usingTemporaryStore && shouldRetryStore {
+                shouldRetryStore = false
                 reopenPersistentStore()
             }
             UserMovie.deduplicate(in: container.mainContext)
@@ -57,7 +63,11 @@ struct ReelRankingsApp: App {
     /// comes to the front it tries again, and only warns if it still can't.
     private func reopenPersistentStore() {
         do {
-            container = try Self.makePersistentContainer()
+            let persistent = try Self.makePersistentContainer()
+            // Carry over anything marked while on the temporary store; the
+            // merge pass that follows folds in any copies that already exist
+            UserMovie.copyAll(from: container.mainContext, to: persistent.mainContext)
+            container = persistent
             usingTemporaryStore = false
         } catch {
             Self.log.error("Saved-films store still failed to open: \(String(describing: error), privacy: .public)")
