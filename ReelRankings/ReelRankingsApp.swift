@@ -11,15 +11,19 @@ struct ReelRankingsApp: App {
     /// temporary in-memory store until it can.
     @State private var usingTemporaryStore: Bool
     @State private var showingTemporaryStoreAlert = false
-    /// Retry opening the store only on launch and after a real trip to the
-    /// background: a Control Center pull is also inactive -> active, and
-    /// retrying (and re-warning) on each of those helps nobody.
-    @State private var shouldRetryStore = true
+    /// The temporary store after the switch to the real one, kept until the
+    /// films marked on it have been copied across.
+    @State private var uncopiedTemporaryContainer: ModelContainer?
+    /// Retry the store and run the clean-up passes only on launch and after a
+    /// real trip to the background: a Control Center pull is also inactive ->
+    /// active, and re-warning or deleting a record mid-edit then helps nobody.
+    @State private var returningFromBackground = true
 
     private static let schema = Schema([UserMovie.self])
     private static let log = Logger(subsystem: "NickRichards.ReelRankings", category: "storage")
 
     init() {
+        TipJar.shared.startListening()
         do {
             _container = State(initialValue: try Self.makePersistentContainer())
             _usingTemporaryStore = State(initialValue: false)
@@ -35,7 +39,6 @@ struct ReelRankingsApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .task { await TipJar.shared.listenForTransactions() }
                 .task {
                     await Task.detached(priority: .background) { FilmDetailCache.pruneExpired() }.value
                 }
@@ -47,11 +50,13 @@ struct ReelRankingsApp: App {
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { shouldRetryStore = true }
-            guard phase == .active else { return }
-            if usingTemporaryStore && shouldRetryStore {
-                shouldRetryStore = false
+            if phase == .background { returningFromBackground = true }
+            guard phase == .active, returningFromBackground else { return }
+            returningFromBackground = false
+            if usingTemporaryStore {
                 reopenPersistentStore()
+            } else if let temporary = uncopiedTemporaryContainer {
+                copyFilms(from: temporary)
             }
             UserMovie.deduplicate(in: container.mainContext)
             Task { await UserMovie.repairOutOfRangeYears(in: container.mainContext) }
@@ -64,14 +69,25 @@ struct ReelRankingsApp: App {
     private func reopenPersistentStore() {
         do {
             let persistent = try Self.makePersistentContainer()
-            // Carry over anything marked while on the temporary store; the
-            // merge pass that follows folds in any copies that already exist
-            UserMovie.copyAll(from: container.mainContext, to: persistent.mainContext)
+            let temporary = container
             container = persistent
             usingTemporaryStore = false
+            copyFilms(from: temporary)
         } catch {
             Self.log.error("Saved-films store still failed to open: \(String(describing: error), privacy: .public)")
             showingTemporaryStoreAlert = true
+        }
+    }
+
+    /// Carries over anything marked on the temporary store; the merge pass
+    /// that follows folds in any copies that already exist. A failed copy is
+    /// retried on the next return from the background, into the same store.
+    private func copyFilms(from temporary: ModelContainer) {
+        if UserMovie.copyAll(from: temporary.mainContext, to: container.mainContext) {
+            uncopiedTemporaryContainer = nil
+        } else {
+            Self.log.error("Couldn't copy films from the temporary store; will retry")
+            uncopiedTemporaryContainer = temporary
         }
     }
 

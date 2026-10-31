@@ -2,12 +2,11 @@ import SwiftUI
 import SwiftData
 import StoreKit
 
-private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
-
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var userMovies: [UserMovie]
     @AppStorage("listDepth") private var listDepth = 10
     @State private var showingAbout = false
@@ -16,9 +15,10 @@ struct ContentView: View {
     @State private var detailMovie: Movie?
     @State private var saveFailed = false
 
-    private var userMovieByID: [Int: UserMovie] { userMovies.canonicalByTMDBID }
-
     var body: some View {
+        // Bound once: body re-runs on every year-wheel tick
+        let userMovieByID = userMovies.canonicalByTMDBID
+        let displayedFilmIDs = viewModel.displayedFilmIDs
         NavigationStack {
             ZStack {
                 Color(white: 0.07).ignoresSafeArea()
@@ -34,21 +34,21 @@ struct ContentView: View {
                     .frame(height: 120)
 
                     SeenProgressView(
-                        seen: viewModel.displayedFilmIDs.filter { userMovieByID[$0]?.isSeen == true }.count,
-                        total: viewModel.displayedFilmIDs.count
+                        seen: displayedFilmIDs.filter { userMovieByID[$0]?.isSeen == true }.count,
+                        total: displayedFilmIDs.count
                     )
 
                     // Column headers
                     HStack(spacing: 0) {
                         Text("BOX OFFICE GROSS")
                             .font(.caption)
-                            .foregroundStyle(gold)
+                            .foregroundStyle(Color.gold)
                             .tracking(1)
                             .frame(maxWidth: .infinity)
                         Divider().frame(height: 32)
                         Text("AUDIENCE FAVORITES")
                             .font(.caption)
-                            .foregroundStyle(gold)
+                            .foregroundStyle(Color.gold)
                             .tracking(1)
                             .frame(maxWidth: .infinity)
                     }
@@ -97,7 +97,7 @@ struct ContentView: View {
                 // Loading overlay
                 if viewModel.isLoading {
                     ProgressView()
-                        .tint(gold)
+                        .tint(Color.gold)
                         .scaleEffect(1.5)
                 }
             }
@@ -113,7 +113,7 @@ struct ContentView: View {
                             Text("My Films")
                                 .font(.subheadline.weight(.semibold))
                         }
-                        .foregroundStyle(gold)
+                        .foregroundStyle(Color.gold)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -121,7 +121,7 @@ struct ContentView: View {
                         showingSearch = true
                     } label: {
                         Image(systemName: "magnifyingglass")
-                            .foregroundStyle(gold)
+                            .foregroundStyle(Color.gold)
                     }
                     .accessibilityLabel("Search")
                 }
@@ -134,7 +134,7 @@ struct ContentView: View {
                         }
                     } label: {
                         Image(systemName: "list.number")
-                            .foregroundStyle(gold)
+                            .foregroundStyle(Color.gold)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -142,7 +142,7 @@ struct ContentView: View {
                         showingAbout = true
                     } label: {
                         Image(systemName: "info.circle")
-                            .foregroundStyle(gold)
+                            .foregroundStyle(Color.gold)
                     }
                 }
             }
@@ -172,10 +172,13 @@ struct ContentView: View {
         .onChange(of: listDepth) {
             viewModel.reload(depth: listDepth)
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { viewModel.refreshYears() }
+        }
     }
 
     private func toggleSeen(_ movie: Movie) {
-        let isSeen = userMovieByID[movie.id]?.isSeen == true
+        let isSeen = userMovies.canonicalByTMDBID[movie.id]?.isSeen == true
         if !UserMovie.update(movie, year: viewModel.selectedYear, in: modelContext, { $0.setSeen(!isSeen) }) {
             saveFailed = true
         }
@@ -191,13 +194,13 @@ private struct SeenProgressView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
             Text("You've seen \(seen) of \(total)")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
             ProgressView(value: Double(seen), total: Double(max(total, 1)))
-                .tint(gold)
+                .tint(Color.gold)
                 .frame(width: 70)
         }
         .padding(.vertical, 6)
@@ -227,7 +230,7 @@ private struct AboutView: View {
                     Spacer()
                     Button("Done") { dismiss() }
                         .font(.headline)
-                        .foregroundStyle(gold)
+                        .foregroundStyle(Color.gold)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -245,7 +248,7 @@ private struct AboutView: View {
                         }
                         .padding(.top, 8)
 
-                        Text("For years before 1939, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
+                        Text("For older years, reliable box office figures aren't available for every film, so the Box Office Gross list is sometimes shorter than the Audience Favorites list.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -302,28 +305,39 @@ private struct AboutView: View {
                     .font(.headline)
                     .foregroundStyle(.white)
 
-                if tipJar.didTip {
-                    Text("Thank you so much. 💛")
-                        .font(.subheadline)
-                        .foregroundStyle(gold)
-                        .padding(.vertical, 8)
-                } else if tipJar.awaitingApproval {
+                // Ask to Buy: StoreKit says nothing if the parent declines, so the
+                // tip buttons stay available under this note.
+                if tipJar.awaitingApproval && !tipJar.didTip {
                     Text("Waiting for approval. Thank you!")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                if tipJar.didTip {
+                    Text("Thank you so much. 💛")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.gold)
                         .padding(.vertical, 8)
-                } else if tipJar.loadFailed {
+                } else if tipJar.products.isEmpty && tipJar.loadFailed {
                     Text("Tip options couldn't load right now.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 8)
+                    RetryButton { Task { await tipJar.load() } }
                 } else if tipJar.products.isEmpty {
                     ProgressView()
-                        .tint(gold)
+                        .tint(Color.gold)
                         .padding(.vertical, 12)
                 } else {
                     ForEach(tipJar.products, id: \.id) { product in
                         tipRow(reels: reelCount(for: product), product: product)
+                    }
+                    // Some tiers didn't load; the ones that did stay usable
+                    if tipJar.loadFailed {
+                        Text("Some tip options didn't load.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        RetryButton { Task { await tipJar.load() } }
                     }
                     if tipJar.purchaseFailed {
                         Text("That purchase couldn't be completed.")
@@ -345,9 +359,9 @@ private struct AboutView: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(gold.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.gold.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
                 }
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
 
                 Button {
                     openURL(appStoreURL)
@@ -356,9 +370,9 @@ private struct AboutView: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(gold.opacity(0.5)))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.5)))
                 }
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
             }
         }
     }
@@ -373,7 +387,7 @@ private struct AboutView: View {
                         Image(systemName: "movieclapper")
                     }
                 }
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
 
                 Text(tierName(for: reels))
                     .foregroundStyle(.white)
@@ -381,17 +395,17 @@ private struct AboutView: View {
                 Spacer()
 
                 if tipJar.purchasing == product.id {
-                    ProgressView().tint(gold)
+                    ProgressView().tint(Color.gold)
                 } else {
                     Text(product.displayPrice)
                         .font(.headline)
-                        .foregroundStyle(gold)
+                        .foregroundStyle(Color.gold)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(gold.opacity(0.35)))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gold.opacity(0.35)))
         }
         .buttonStyle(.plain)
         .disabled(tipJar.purchasing != nil)
@@ -413,6 +427,13 @@ private struct AboutView: View {
         if product.id.hasSuffix(".medium") { return 2 }
         return 3
     }
+}
+
+// MARK: - Theme
+
+extension Color {
+    /// The app's accent, #FFD700.
+    static let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
 }
 
 // MARK: - Save failure
@@ -480,8 +501,8 @@ struct RetryButton: View {
                 .font(.subheadline.bold())
                 .padding(.horizontal, 18)
                 .padding(.vertical, 9)
-                .background(gold.opacity(0.18), in: Capsule())
+                .background(Color.gold.opacity(0.18), in: Capsule())
         }
-        .foregroundStyle(gold)
+        .foregroundStyle(Color.gold)
     }
 }

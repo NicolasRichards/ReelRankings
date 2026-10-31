@@ -1,8 +1,6 @@
 import SwiftUI
 import SwiftData
 
-private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
-
 struct FilmDetailView: View {
     let movie: Movie
     let year: Int
@@ -55,7 +53,7 @@ struct FilmDetailView: View {
 
             Button("Done") { dismiss() }
                 .font(.headline)
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -116,7 +114,7 @@ struct FilmDetailView: View {
                 if let tagline = detail?.tagline {
                     Text(tagline)
                         .font(.subheadline.italic())
-                        .foregroundStyle(gold.opacity(0.85))
+                        .foregroundStyle(Color.gold.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 2)
                 }
@@ -155,11 +153,11 @@ struct FilmDetailView: View {
         ForEach(rankings, id: \.self) { ranking in
             Label("#\(ranking.rank) \(ranking.list), \(String(ranking.year))", systemImage: "trophy.fill")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
                 .lineLimit(1)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(gold.opacity(0.14), in: Capsule())
+                .background(Color.gold.opacity(0.14), in: Capsule())
         }
     }
 
@@ -167,7 +165,7 @@ struct FilmDetailView: View {
         VStack(spacing: 0) {
             controlRow(
                 icon: isSeen ? "checkmark.circle.fill" : "circle",
-                iconColor: isSeen ? gold : Color.white.opacity(0.45),
+                iconColor: isSeen ? Color.gold : Color.white.opacity(0.45),
                 label: isSeen ? "Seen" : "Mark as Seen"
             ) {
                 let seen = !isSeen
@@ -194,7 +192,7 @@ struct FilmDetailView: View {
 
             controlRow(
                 icon: isOnWatchlist ? "bookmark.fill" : "bookmark",
-                iconColor: isOnWatchlist ? gold : Color.white.opacity(0.45),
+                iconColor: isOnWatchlist ? Color.gold : Color.white.opacity(0.45),
                 label: isOnWatchlist ? "On Watchlist" : "Add to Watchlist"
             ) {
                 let onWatchlist = !isOnWatchlist
@@ -292,15 +290,15 @@ struct FilmDetailView: View {
                         .font(.subheadline.bold())
                         .padding(.horizontal, 18)
                         .padding(.vertical, 9)
-                        .background(gold.opacity(0.18), in: Capsule())
+                        .background(Color.gold.opacity(0.18), in: Capsule())
                 }
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 12)
         } else {
             ProgressView()
-                .tint(gold)
+                .tint(Color.gold)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 24)
         }
@@ -327,7 +325,7 @@ struct FilmDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.caption.bold())
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
                 .tracking(1)
                 .textCase(.uppercase)
             content()

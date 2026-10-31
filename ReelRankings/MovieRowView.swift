@@ -1,7 +1,5 @@
 import SwiftUI
 
-private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
-
 struct MovieRowView: View {
     let rank: Int
     let movie: Movie
@@ -19,7 +17,7 @@ struct MovieRowView: View {
                 .font(.caption.monospaced())
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
                 .frame(width: 24, alignment: .trailing)
                 .padding(.top, 9)
 
@@ -64,10 +62,10 @@ struct MovieRowView: View {
     private var seenIcon: some View {
         if isSeen {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
         } else if isOnWatchlist {
             Image(systemName: "bookmark.circle")
-                .foregroundStyle(gold.opacity(0.75))
+                .foregroundStyle(Color.gold.opacity(0.75))
         } else {
             Image(systemName: "circle")
                 .foregroundStyle(Color.white.opacity(0.45))
@@ -77,13 +75,14 @@ struct MovieRowView: View {
 
 struct InlineStarsView: View {
     let rating: Int
+    var font: Font = .system(size: 9)
 
     var body: some View {
         HStack(spacing: 1) {
             ForEach(1...5, id: \.self) { star in
                 Image(systemName: star <= rating ? "star.fill" : "star")
-                    .font(.system(size: 9))
-                    .foregroundStyle(star <= rating ? gold : Color.white.opacity(0.25))
+                    .font(font)
+                    .foregroundStyle(star <= rating ? Color.gold : Color.white.opacity(0.25))
             }
         }
         .accessibilityElement(children: .ignore)

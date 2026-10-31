@@ -1,7 +1,5 @@
 import SwiftUI
 
-private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
-
 struct MovieSearchView: View {
     /// The years the app ranks; results outside it can't be jumped to.
     let yearRange: ClosedRange<Int>
@@ -29,7 +27,7 @@ struct MovieSearchView: View {
                     Spacer()
                     Button("Done") { dismiss() }
                         .font(.headline)
-                        .foregroundStyle(gold)
+                        .foregroundStyle(Color.gold)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -40,7 +38,7 @@ struct MovieSearchView: View {
                         .foregroundStyle(.secondary)
                     TextField("Search movies", text: $query)
                         .foregroundStyle(.white)
-                        .tint(gold)
+                        .tint(Color.gold)
                         .autocorrectionDisabled()
                         .focused($fieldFocused)
                     if !query.isEmpty {
@@ -60,7 +58,7 @@ struct MovieSearchView: View {
 
                 if isSearching {
                     Spacer()
-                    ProgressView().tint(gold)
+                    ProgressView().tint(Color.gold)
                     Spacer()
                 } else if let errorMessage {
                     Spacer()

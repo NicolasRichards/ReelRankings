@@ -37,9 +37,14 @@ extension UserMovie {
         if rating > 0 { setSeen(true) }
     }
 
+    /// Adding restamps `dateAdded`, which My Films sorts the watchlist by, so
+    /// a film seen long ago and re-added today goes to the top.
     func setOnWatchlist(_ onWatchlist: Bool) {
         isOnWatchlist = onWatchlist
-        if onWatchlist { isSeen = false }
+        if onWatchlist {
+            isSeen = false
+            dateAdded = Date()
+        }
     }
 
     /// Applies `change` to the film's record, creating it first if needed, and
@@ -111,7 +116,8 @@ extension UserMovie {
     /// so independent edits on two devices can sync into duplicate records.
     /// Merges each duplicate group into its oldest record and deletes the rest,
     /// then deletes records with nothing left in them (the My Films sheet keeps
-    /// an emptied record while it's open; older builds left them behind).
+    /// an emptied record while it's open, so those films are skipped; older
+    /// builds left them behind).
     @MainActor
     static func deduplicate(in context: ModelContext) {
         guard let all = try? context.fetch(FetchDescriptor<UserMovie>()) else { return }
@@ -127,12 +133,16 @@ extension UserMovie {
             // (the same promise setSeen makes).
             let candidates = keeper.isSeen ? records.filter(\.isSeen) : records
             keeper.userRating = candidates.map(\.userRating).max() ?? 0
+            // Keep the latest watchlist add, so the merged film sorts where it was re-added
+            if keeper.isOnWatchlist, let latest = records.filter(\.isOnWatchlist).map(\.dateAdded).max() {
+                keeper.dateAdded = latest
+            }
             for duplicate in sorted.dropFirst() {
                 context.delete(duplicate)
             }
             changed = true
         }
-        for record in all where !record.isDeleted && record.isEmpty {
+        for record in all where !record.isDeleted && record.isEmpty && !beingEdited.contains(record.tmdbID) {
             context.delete(record)
             changed = true
         }
@@ -140,6 +150,9 @@ extension UserMovie {
     }
 
     var isEmpty: Bool { !isSeen && !isOnWatchlist && userRating == 0 }
+
+    /// Films open in a screen that keeps an emptied record (see `update`).
+    @MainActor static var beingEdited: Set<Int> = []
 
     /// For a screen that kept an emptied record while open: deletes the
     /// film's records if nothing is left in them.
@@ -152,10 +165,12 @@ extension UserMovie {
         _ = save(context)
     }
 
-    /// Copies every record into another store, keeping their dates.
+    /// Copies every record into another store, keeping their dates. Returns
+    /// false if the records couldn't be read or the copy couldn't be saved.
     @MainActor
-    static func copyAll(from source: ModelContext, to destination: ModelContext) {
-        guard let records = try? source.fetch(FetchDescriptor<UserMovie>()), !records.isEmpty else { return }
+    static func copyAll(from source: ModelContext, to destination: ModelContext) -> Bool {
+        guard let records = try? source.fetch(FetchDescriptor<UserMovie>()) else { return false }
+        guard !records.isEmpty else { return true }
         for record in records {
             let copy = UserMovie(tmdbID: record.tmdbID, title: record.title, year: record.year)
             copy.isSeen = record.isSeen
@@ -164,19 +179,22 @@ extension UserMovie {
             copy.dateAdded = record.dateAdded
             destination.insert(copy)
         }
-        _ = save(destination)
+        return save(destination)
     }
 }
 
 extension UserMovie {
     @MainActor private static var isRepairingYears = false
+    private static let unrepairableYearsKey = "unrepairableYearTMDBIDs"
 
     /// Builds before 1.5 (10) took the year from the phone's calendar, so a
     /// Buddhist-calendar user browsing "2568" (which showed TMDB's all-time
     /// lists) saved films under that year. The saved year can't be converted,
     /// since it's the year that was browsed rather than the film's own, so
-    /// each such film's release year is looked up. Anything left unfixed
-    /// (offline, TMDB error) is retried the next time the app comes forward.
+    /// each such film's release year is looked up. A film TMDB no longer has,
+    /// or has no release date for, is remembered and not looked up again;
+    /// anything else left unfixed (offline, TMDB error) is retried the next
+    /// time the app comes forward.
     @MainActor
     static func repairOutOfRangeYears(in context: ModelContext) async {
         guard !isRepairingYears else { return }
@@ -188,14 +206,26 @@ extension UserMovie {
         let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
         let valid = 1870...currentYear
         guard let all = try? context.fetch(FetchDescriptor<UserMovie>()) else { return }
-        let broken = all.filter { !valid.contains($0.year) }
+        let defaults = UserDefaults.standard
+        var unrepairable = Set(defaults.array(forKey: unrepairableYearsKey) as? [Int] ?? [])
+        let broken = all.filter { !valid.contains($0.year) && !unrepairable.contains($0.tmdbID) }
         guard !broken.isEmpty else { return }
 
         let service = TMDBService()
         for tmdbID in Set(broken.map(\.tmdbID)) {
-            guard let year = try? await service.fetchReleaseYear(id: tmdbID) else { continue }
+            let detail: FilmDetail?
+            do {
+                detail = try await service.cachedFilmDetail(id: tmdbID)
+            } catch {
+                continue
+            }
+            guard let year = detail?.releaseYear else {
+                unrepairable.insert(tmdbID)
+                defaults.set(Array(unrepairable), forKey: unrepairableYearsKey)
+                continue
+            }
             // Re-read after the await: sync or an edit may have changed the records
-            for record in (try? context.fetch(FetchDescriptor<UserMovie>(predicate: #Predicate { $0.tmdbID == tmdbID }))) ?? []
+            for record in (try? allRecords(for: tmdbID, in: context)) ?? []
             where !valid.contains(record.year) {
                 record.year = year
             }

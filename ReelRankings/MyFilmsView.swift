@@ -1,8 +1,6 @@
 import SwiftUI
 import SwiftData
 
-private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
-
 struct MyFilmsView: View {
     @Query(sort: \UserMovie.dateAdded, order: .reverse) private var userMovies: [UserMovie]
     @Environment(\.modelContext) private var modelContext
@@ -20,13 +18,9 @@ struct MyFilmsView: View {
         return userMovies.filter { canonical[$0.tmdbID] === $0 }
     }
 
-    private var watchlist: [UserMovie] {
-        uniqueMovies.filter { $0.isOnWatchlist }.sorted { $0.dateAdded > $1.dateAdded }
-    }
-
     // Groups for the Seen section, label + sorted movies
-    private var seenGroups: [(label: String, movies: [UserMovie])] {
-        let seen = uniqueMovies.filter { $0.isSeen }
+    private func groupSeen(_ movies: [UserMovie]) -> [(label: String, movies: [UserMovie])] {
+        let seen = movies.filter { $0.isSeen }
         switch seenSort {
         case .year:
             let grouped = Dictionary(grouping: seen, by: { $0.year })
@@ -51,6 +45,10 @@ struct MyFilmsView: View {
     }
 
     var body: some View {
+        let movies = uniqueMovies
+        // Newest first, from the @Query's sort; adding to the watchlist restamps dateAdded
+        let watchlist = movies.filter { $0.isOnWatchlist }
+        let seenGroups = groupSeen(movies)
         ZStack {
             Color(white: 0.07).ignoresSafeArea()
 
@@ -63,7 +61,7 @@ struct MyFilmsView: View {
                     Spacer()
                     Button("Done") { dismiss() }
                         .font(.headline)
-                        .foregroundStyle(gold)
+                        .foregroundStyle(Color.gold)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -120,7 +118,7 @@ struct MyFilmsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
                 .font(.caption.bold())
-                .foregroundStyle(gold)
+                .foregroundStyle(Color.gold)
                 .tracking(1)
                 .textCase(.uppercase)
 
@@ -136,13 +134,7 @@ struct MyFilmsView: View {
                                     .foregroundStyle(.white)
                                     .multilineTextAlignment(.leading)
                                 if record.isSeen && record.userRating > 0 {
-                                    HStack(spacing: 2) {
-                                        ForEach(1...5, id: \.self) { star in
-                                            Image(systemName: star <= record.userRating ? "star.fill" : "star")
-                                                .font(.caption2)
-                                                .foregroundStyle(star <= record.userRating ? gold : Color.white.opacity(0.2))
-                                        }
-                                    }
+                                    InlineStarsView(rating: record.userRating, font: .caption2)
                                 } else if record.isSeen {
                                     Text("Unrated")
                                         .font(.caption2)
@@ -220,7 +212,7 @@ private struct MyFilmsEditSheet: View {
                 VStack(spacing: 1) {
                     optionRow(
                         icon: isOnWatchlist ? "bookmark.fill" : "bookmark",
-                        iconColor: isOnWatchlist ? gold : .secondary,
+                        iconColor: isOnWatchlist ? Color.gold : .secondary,
                         label: isOnWatchlist ? "On Watchlist" : "Add to Watchlist"
                     ) {
                         let onWatchlist = !isOnWatchlist
@@ -274,7 +266,7 @@ private struct MyFilmsEditSheet: View {
 
                 Button("Done") { dismiss() }
                     .font(.headline)
-                    .foregroundStyle(gold)
+                    .foregroundStyle(Color.gold)
                     .padding(.bottom, 28)
             }
         }
@@ -282,7 +274,11 @@ private struct MyFilmsEditSheet: View {
         .presentationDragIndicator(.hidden)
         .preferredColorScheme(.dark)
         .saveFailedAlert(isPresented: $saveFailed)
-        .onDisappear { UserMovie.removeIfEmpty(tmdbID: target.tmdbID, in: modelContext) }
+        .onAppear { UserMovie.beingEdited.insert(target.tmdbID) }
+        .onDisappear {
+            UserMovie.beingEdited.remove(target.tmdbID)
+            UserMovie.removeIfEmpty(tmdbID: target.tmdbID, in: modelContext)
+        }
         // Deleted elsewhere (sync, or another iPad window): nothing left to edit
         .onChange(of: records.isEmpty) { _, isEmpty in
             if isEmpty { dismiss() }

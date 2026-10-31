@@ -13,8 +13,8 @@ class ContentViewModel: ObservableObject {
     @Published var boxOfficeFailed = false
 
     /// 1929 (when sound overtook silent film) through last year.
-    let yearRange: ClosedRange<Int>
-    let availableYears: [Int]
+    @Published private(set) var yearRange: ClosedRange<Int>
+    @Published private(set) var availableYears: [Int]
 
     private let service = TMDBService()
     private var loadTask: Task<Void, Never>?
@@ -22,14 +22,29 @@ class ContentViewModel: ObservableObject {
     private var loadGeneration = 0
 
     init() {
+        let range = Self.currentYearRange()
+        self.selectedYear = range.upperBound
+        self.yearRange = range
+        self.availableYears = Array(range.reversed())
+    }
+
+    private static func currentYearRange() -> ClosedRange<Int> {
         // Gregorian explicitly: Calendar.current follows the user's calendar
         // setting (Buddhist, Japanese), but TMDB release years are Gregorian.
         let currentYear = Calendar(identifier: .gregorian).component(.year, from: Date())
-        let defaultYear = currentYear - 1
-        self.selectedYear = defaultYear
-        let range = 1929...max(defaultYear, 1929)
-        self.yearRange = range
-        self.availableYears = Array(range.reversed())
+        return 1929...max(currentYear - 1, 1929)
+    }
+
+    /// Called when the app comes forward: the view model outlives New Year,
+    /// so the year that just ended is added, and becomes the selection if the
+    /// old default was still selected.
+    func refreshYears() {
+        let range = Self.currentYearRange()
+        guard range != yearRange else { return }
+        let wasDefault = selectedYear == yearRange.upperBound
+        yearRange = range
+        availableYears = Array(range.reversed())
+        if wasDefault { selectedYear = range.upperBound }
     }
 
     /// Starts loading the selected year, cancelling any load still in flight
@@ -67,8 +82,8 @@ class ContentViewModel: ObservableObject {
         boxOfficeMovies = []
         audienceMovies = []
 
-        // Fetch both lists concurrently, but let them fail separately: the
-        // pre-1939 Box Office check makes dozens of requests, and one failing
+        // Fetch both lists concurrently, but let them fail separately: a thin
+        // year's Box Office check makes dozens of requests, and one failing
         // shouldn't take down an Audience list that loaded fine.
         async let boxOffice = service.fetchBoxOfficeTop(year: year, count: depth)
         async let audience = service.fetchAudienceTop(year: year, count: depth)

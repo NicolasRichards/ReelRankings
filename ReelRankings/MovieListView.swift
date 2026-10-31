@@ -1,11 +1,9 @@
 import SwiftUI
 
-private let gold = Color(red: 1.0, green: 0.84, blue: 0.0)
-
 struct MovieListView: View {
     let movies: [Movie]
     // Rows always render up to this count; entries beyond `movies` render blank
-    // (used for pre-1939 years where verified box office data runs out early).
+    // (used for thin years where verified box office data runs out early).
     let targetCount: Int
     let userMovieByID: [Int: UserMovie]
     let onToggleSeen: (Movie) -> Void
@@ -45,7 +43,7 @@ private struct BlankMovieRowView: View {
                 .font(.caption.monospaced())
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .foregroundStyle(gold.opacity(0.35))
+                .foregroundStyle(Color.gold.opacity(0.35))
                 .frame(width: 24, alignment: .trailing)
                 .padding(.top, 9)
 

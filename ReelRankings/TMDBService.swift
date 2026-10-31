@@ -4,15 +4,12 @@ import Foundation
 final class TMDBService {
     private let session = URLSession.shared
 
-    // Cache TMDB ID → verified revenue (pre-1939 years only). 0 records "no
-    // figure", so a reload or Retry doesn't request those films again.
-    private var revenueCache: [Int: Int] = [:]
+    /// Films whose detail page is gone (deleted or merged on TMDB), shared by
+    /// every instance so a reload or Retry doesn't request them again.
+    private static var missingFilmIDs: Set<Int> = []
 
-    // Before this year, TMDB's discover sort trusts revenue.desc but the list endpoint
-    // never returns the actual revenue figure, and most catalog entries have none at all.
-    // Below this cutoff we verify each candidate's real revenue via the detail endpoint
-    // and only rank the ones we can confirm.
-    private static let verifiedRevenueCutoffYear = 1939
+    /// From this year on TMDB has revenue for most well-known films.
+    private static let mostlyFullRevenueYear = 1939
 
     // MARK: - Requests
 
@@ -27,132 +24,86 @@ final class TMDBService {
         return data
     }
 
-    // MARK: - Box Office
-
-    func fetchBoxOfficeTop(year: Int, count: Int) async throws -> [Movie] {
-        if year < Self.verifiedRevenueCutoffYear {
-            return try await fetchVerifiedBoxOfficeTop(year: year, count: count)
-        }
+    private func discover(year: Int, sort: String) async throws -> [MovieResult] {
         var components = URLComponents(string: "\(Config.tmdbBaseURL)/discover/movie")!
         components.queryItems = [
             URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
             URLQueryItem(name: "primary_release_year", value: "\(year)"),
-            URLQueryItem(name: "sort_by", value: "revenue.desc"),
+            URLQueryItem(name: "sort_by", value: sort),
             URLQueryItem(name: "vote_count.gte", value: "50"),
             URLQueryItem(name: "page", value: "1")
         ]
         let data = try await fetchData(from: components.url!)
-        let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
-        return Array(response.results.prefix(count)).map {
-            Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0)
-        }
-    }
-
-    // TMDB's revenue data gets sparse before 1939. Rather than rank movies with no known
-    // revenue, this pulls candidates a page at a time (discover already sorts by
-    // revenue.desc, so real numbers cluster up front), verifies each one's real figure via
-    // the detail endpoint, and returns only the confirmed ones — shorter than `count` when
-    // a year doesn't have enough reliable data. Because the sort puts every film with a real
-    // figure first, a page containing any film without one means later pages have none, so
-    // the next page is fetched only when every film on this page verified.
-    private func fetchVerifiedBoxOfficeTop(year: Int, count: Int) async throws -> [Movie] {
-        var verifiedByID: [Int: (MovieResult, Int)] = [:]
-        for page in 1...2 {
-            let candidates = try await fetchRevenueDiscoverPage(year: year, page: page)
-            if candidates.isEmpty { break }
-
-            // Every lookup runs to the end, even after one fails, so the ones that
-            // succeeded are cached and a Retry only re-requests what failed.
-            var pageHadUnverified = false
-            var failure: Error?
-            let pageVerified: [(MovieResult, Int)] = await withTaskGroup(of: (MovieResult, Result<Int?, Error>).self) { group in
-                for candidate in candidates {
-                    group.addTask { [self] in
-                        do {
-                            return (candidate, .success(try await fetchRevenue(for: candidate.id)))
-                        } catch {
-                            return (candidate, .failure(error))
-                        }
-                    }
-                }
-                var results: [(MovieResult, Int)] = []
-                for await (candidate, outcome) in group {
-                    switch outcome {
-                    case .success(let revenue?):
-                        results.append((candidate, revenue))
-                    case .success(nil):
-                        pageHadUnverified = true
-                    case .failure(let error):
-                        failure = failure ?? error
-                    }
-                }
-                return results
-            }
-            if let failure { throw failure }
-            for (candidate, revenue) in pageVerified {
-                verifiedByID[candidate.id] = (candidate, revenue)
-            }
-
-            // Discover pages are 20 results; a short page means there's nothing more to fetch.
-            if verifiedByID.count >= count || candidates.count < 20 || pageHadUnverified { break }
-        }
-
-        return verifiedByID.values
-            .sorted { $0.1 > $1.1 }
-            .prefix(count)
-            .map { Movie(id: $0.0.id, title: $0.0.title, revenue: $0.1, voteCount: $0.0.vote_count ?? 0) }
-    }
-
-    private func fetchRevenueDiscoverPage(year: Int, page: Int) async throws -> [MovieResult] {
-        var components = URLComponents(string: "\(Config.tmdbBaseURL)/discover/movie")!
-        components.queryItems = [
-            URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
-            URLQueryItem(name: "primary_release_year", value: "\(year)"),
-            URLQueryItem(name: "sort_by", value: "revenue.desc"),
-            URLQueryItem(name: "vote_count.gte", value: "50"),
-            URLQueryItem(name: "page", value: "\(page)")
-        ]
-        let data = try await fetchData(from: components.url!)
         return try JSONDecoder().decode(MovieDiscoverResponse.self, from: data).results
+    }
+
+    // MARK: - Box Office
+
+    // Discover sorts by revenue but never returns the figure, and in thin years
+    // (most before 1939, some later) TMDB has none for many films. Films with no
+    // figure sort last, so if the last film shown has one they all do: one
+    // lookup settles most years. Otherwise every candidate is checked and only
+    // confirmed figures are ranked, leaving the list shorter than `count`.
+    // Lookups go through the persistent film-detail cache (FilmDetailCache.isFresh:
+    // a day for this and last year's films, 30 days for older ones).
+    func fetchBoxOfficeTop(year: Int, count: Int) async throws -> [Movie] {
+        let candidates = Array(try await discover(year: year, sort: "revenue.desc").prefix(count))
+        guard let last = candidates.last else { return [] }
+        let lastRevenue: Int?
+        do {
+            lastRevenue = try await fetchRevenue(for: last.id)
+        } catch where year >= Self.mostlyFullRevenueYear {
+            // Discover's list is usually right from here on, so a failed check
+            // shouldn't hide it (thin years still throw, since ranks would shift)
+            return candidates.map { Movie($0) }
+        }
+        if lastRevenue != nil {
+            return candidates.map { Movie($0) }
+        }
+
+        // Every lookup runs to the end, even after one fails, so the ones that
+        // succeeded are cached and a Retry only re-requests what failed.
+        var failure: Error?
+        let verified: [(MovieResult, Int)] = await withTaskGroup(of: (MovieResult, Result<Int?, Error>).self) { group in
+            for candidate in candidates.dropLast() {
+                group.addTask { [self] in
+                    do {
+                        return (candidate, .success(try await fetchRevenue(for: candidate.id)))
+                    } catch {
+                        return (candidate, .failure(error))
+                    }
+                }
+            }
+            var results: [(MovieResult, Int)] = []
+            for await (candidate, outcome) in group {
+                switch outcome {
+                case .success(let revenue?):
+                    results.append((candidate, revenue))
+                case .success(nil):
+                    break
+                case .failure(let error):
+                    failure = failure ?? error
+                }
+            }
+            return results
+        }
+        if let failure { throw failure }
+        return verified
+            .sorted { $0.1 > $1.1 }
+            .map { Movie($0.0, revenue: $0.1) }
     }
 
     /// The film's revenue, or nil when TMDB has no figure for it (including a
     /// film whose detail page is gone). Any other failed request throws, so it
     /// fails the Box Office list rather than silently dropping the film.
     private func fetchRevenue(for movieID: Int) async throws -> Int? {
-        if let cached = revenueCache[movieID] {
-            return cached > 0 ? cached : nil
-        }
-        var components = URLComponents(string: "\(Config.tmdbBaseURL)/movie/\(movieID)")!
-        components.queryItems = [URLQueryItem(name: "api_key", value: Config.tmdbAPIKey)]
-        let revenue: Int
-        do {
-            let data = try await fetchData(from: components.url!)
-            revenue = try JSONDecoder().decode(MovieDetailResponse.self, from: data).revenue ?? 0
-        } catch TMDBError.badStatus(404) {
-            // Still listed by discover but deleted or merged on TMDB; retrying won't help
-            revenue = 0
-        }
-        revenueCache[movieID] = revenue
-        return revenue > 0 ? revenue : nil
+        try await cachedFilmDetail(id: movieID)?.revenue
     }
 
     // MARK: - Audience Favorites
 
     func fetchAudienceTop(year: Int, count: Int) async throws -> [Movie] {
-        var components = URLComponents(string: "\(Config.tmdbBaseURL)/discover/movie")!
-        components.queryItems = [
-            URLQueryItem(name: "api_key", value: Config.tmdbAPIKey),
-            URLQueryItem(name: "primary_release_year", value: "\(year)"),
-            URLQueryItem(name: "sort_by", value: "vote_count.desc"),
-            URLQueryItem(name: "vote_count.gte", value: "50"),
-            URLQueryItem(name: "page", value: "1")
-        ]
-        let data = try await fetchData(from: components.url!)
-        let response = try JSONDecoder().decode(MovieDiscoverResponse.self, from: data)
-        return Array(response.results.prefix(count)).map {
-            Movie(id: $0.id, title: $0.title, revenue: $0.revenue ?? 0, voteCount: $0.vote_count ?? 0)
-        }
+        try await discover(year: year, sort: "vote_count.desc").prefix(count).map { Movie($0) }
     }
 
     // MARK: - Search
@@ -169,18 +120,6 @@ final class TMDBService {
         return response.results
     }
 
-    // MARK: - Release Year
-
-    /// The film's release year, or nil if TMDB doesn't know it.
-    func fetchReleaseYear(id: Int) async throws -> Int? {
-        var components = URLComponents(string: "\(Config.tmdbBaseURL)/movie/\(id)")!
-        components.queryItems = [URLQueryItem(name: "api_key", value: Config.tmdbAPIKey)]
-        let data = try await fetchData(from: components.url!)
-        let date = try JSONDecoder().decode(ReleaseDateResponse.self, from: data).release_date
-        guard let date, date.count >= 4 else { return nil }
-        return Int(date.prefix(4))
-    }
-
     // MARK: - Film Detail
 
     /// One request per tapped film; `credits` rides along via append_to_response.
@@ -193,6 +132,27 @@ final class TMDBService {
         let data = try await fetchData(from: components.url!)
         let response = try JSONDecoder().decode(FilmDetailResponse.self, from: data)
         return FilmDetail(response: response)
+    }
+
+    /// The film's detail from `FilmDetailCache` while fresh, otherwise fetched
+    /// and cached; nil when TMDB no longer has the film. If the fetch fails, an
+    /// expired entry stands in: it still says whether a film has a revenue
+    /// figure and when it was released.
+    func cachedFilmDetail(id: Int) async throws -> FilmDetail? {
+        let cached = FilmDetailCache.load(id: id)
+        if let cached, FilmDetailCache.isFresh(cached) { return cached }
+        guard !Self.missingFilmIDs.contains(id) else { return nil }
+        do {
+            let fresh = try await fetchFilmDetail(id: id)
+            FilmDetailCache.save(fresh)
+            return fresh
+        } catch TMDBError.badStatus(404) {
+            Self.missingFilmIDs.insert(id)
+            return nil
+        } catch {
+            if let cached { return cached }
+            throw error
+        }
     }
 }
 
@@ -213,12 +173,11 @@ struct MovieResult: Decodable, Sendable {
     let vote_count: Int?
 }
 
-struct MovieDetailResponse: Decodable, Sendable {
-    let revenue: Int?
-}
-
-struct ReleaseDateResponse: Decodable, Sendable {
-    let release_date: String?
+private extension Movie {
+    init(_ result: MovieResult, revenue: Int? = nil) {
+        self.init(id: result.id, title: result.title, revenue: revenue ?? result.revenue ?? 0,
+                  voteCount: result.vote_count ?? 0)
+    }
 }
 
 struct MovieSearchResponse: Decodable, Sendable {
